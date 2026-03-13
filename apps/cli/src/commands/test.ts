@@ -173,17 +173,33 @@ export default class Test extends Command {
 
     const registry = new PluginRegistry();
 
-    // Import builtin plugins dynamically
+    // Import all builtin plugins dynamically
     try {
-      const [secretScannerMod, gitMinerMod] = await Promise.all([
+      const pluginImports = await Promise.all([
         import('@wigtn/spear-01-secret-scanner' as string).catch(() => null),
         import('@wigtn/spear-02-git-miner' as string).catch(() => null),
+        import('@wigtn/spear-03-env-exfil' as string).catch(() => null),
+        import('@wigtn/spear-04-mcp-poisoner' as string).catch(() => null),
+        import('@wigtn/spear-05-dep-confusion' as string).catch(() => null),
+        import('@wigtn/spear-06-prompt-injector' as string).catch(() => null),
+        import('@wigtn/spear-08-supply-chain' as string).catch(() => null),
+        import('@wigtn/spear-10-agent-manipulator' as string).catch(() => null),
+        import('@wigtn/spear-11-cicd-exploiter' as string).catch(() => null),
+        import('@wigtn/spear-12-container-audit' as string).catch(() => null),
+        import('@wigtn/spear-13-cloud-credential' as string).catch(() => null),
+        import('@wigtn/spear-14-ssrf-tester' as string).catch(() => null),
+        import('@wigtn/spear-15-ide-audit' as string).catch(() => null),
+        import('@wigtn/spear-16-webhook-scanner' as string).catch(() => null),
+        import('@wigtn/spear-17-llm-exploiter' as string).catch(() => null),
+        import('@wigtn/spear-19-social-eng' as string).catch(() => null),
+        import('@wigtn/spear-21-distillation' as string).catch(() => null),
+        import('@wigtn/spear-18-tls-recon' as string).catch(() => null),
+        import('@wigtn/spear-22-infra-intel' as string).catch(() => null),
       ]);
 
-      const builtinPlugins = [
-        secretScannerMod?.default,
-        gitMinerMod?.default,
-      ].filter(Boolean);
+      const builtinPlugins = pluginImports
+        .map((mod) => mod?.default)
+        .filter(Boolean);
 
       if (builtinPlugins.length > 0) {
         registry.registerBuiltin(builtinPlugins, logger);

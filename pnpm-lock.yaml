@@ -44,6 +44,63 @@ importers:
       '@wigtn/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@wigtn/spear-01-secret-scanner':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-01-secret-scanner
+      '@wigtn/spear-02-git-miner':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-02-git-miner
+      '@wigtn/spear-03-env-exfil':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-03-env-exfil
+      '@wigtn/spear-04-mcp-poisoner':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-04-mcp-poisoner
+      '@wigtn/spear-05-dep-confusion':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-05-dep-confusion
+      '@wigtn/spear-06-prompt-injector':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-06-prompt-injector
+      '@wigtn/spear-08-supply-chain':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-08-supply-chain
+      '@wigtn/spear-10-agent-manipulator':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-10-agent-manipulator
+      '@wigtn/spear-11-cicd-exploiter':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-11-cicd-exploiter
+      '@wigtn/spear-12-container-audit':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-12-container-audit
+      '@wigtn/spear-13-cloud-credential':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-13-cloud-credential
+      '@wigtn/spear-14-ssrf-tester':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-14-ssrf-tester
+      '@wigtn/spear-15-ide-audit':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-15-ide-audit
+      '@wigtn/spear-16-webhook-scanner':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-16-webhook-scanner
+      '@wigtn/spear-17-llm-exploiter':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-17-llm-exploiter
+      '@wigtn/spear-18-tls-recon':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-18-tls-recon
+      '@wigtn/spear-19-social-eng':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-19-social-eng
+      '@wigtn/spear-21-distillation':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-21-distillation
+      '@wigtn/spear-22-infra-intel':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-22-infra-intel
       chalk:
         specifier: ^5.3.0
         version: 5.6.2
@@ -382,6 +439,22 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/plugins/spear-18-tls-recon:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/plugins/spear-19-social-eng:
     dependencies:
       '@wigtn/core':
@@ -399,6 +472,22 @@ importers:
         version: 5.9.3
 
   packages/plugins/spear-21-distillation:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/plugins/spear-22-infra-intel:
     dependencies:
       '@wigtn/core':
         specifier: workspace:*

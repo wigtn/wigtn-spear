@@ -64,6 +64,10 @@ export {
 } from './verification-cache.js';
 export type { CacheEntry } from './verification-cache.js';
 
+// --- Secret Verifier ---
+export { SecretVerifier } from './secret-verifier.js';
+export type { VerificationResult } from './secret-verifier.js';
+
 // --- Security Score Calculator ---
 export {
   calculateSecurityScore,
@@ -74,3 +78,14 @@ export type {
   SeverityBreakdown,
   ModuleBreakdown,
 } from './security-score.js';
+
+// --- Attack Playbook Generator ---
+export {
+  generateAttackPlaybook,
+  formatPlaybookMarkdown,
+} from './attack-playbook.js';
+export type {
+  AttackStep,
+  AttackScenario,
+  AttackPlaybook,
+} from './attack-playbook.js';

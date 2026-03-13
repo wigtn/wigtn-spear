@@ -28,8 +28,9 @@
  *   - T1557     Adversary-in-the-Middle
  *   - T1567     Exfiltration Over Web Service
  *
- * This plugin requires only `fs:read` permission and no network access.
- * It is safe to run in both `safe` and `aggressive` modes.
+ * Safe mode:       Static analysis only -- `fs:read` permission, no network access.
+ * Aggressive mode:  Generates SSRF exploitation vectors with cloud metadata probes,
+ *                   bypass techniques, and attack commands for each SSRF finding.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -45,6 +46,7 @@ import type {
 
 import { ALL_SSRF_PATTERNS, getPatternCounts } from './patterns.js';
 import type { SsrfPattern } from './patterns.js';
+import { SsrfExploiter } from './ssrf-exploiter.js';
 
 // ─── Constants ─────────────────────────────────────────────────
 
@@ -121,7 +123,7 @@ export class SsrfTesterPlugin implements SpearPlugin {
     safeMode: true,
     requiresNetwork: false,
     supportedPlatforms: ['darwin', 'linux', 'win32'],
-    permissions: ['fs:read'],
+    permissions: ['fs:read', 'net:outbound'],
     trustLevel: 'builtin',
   };
 
@@ -144,12 +146,16 @@ export class SsrfTesterPlugin implements SpearPlugin {
 
   /**
    * Scan: Walk directory for source code files, scan each for SSRF patterns.
+   * In aggressive mode, also generates SSRF exploitation vectors.
    */
   async *scan(target: ScanTarget, context: PluginContext): AsyncGenerator<Finding> {
     const rootDir = resolve(target.path);
 
     let filesScanned = 0;
     let findingsCount = 0;
+
+    // Collect SSRF findings for potential aggressive mode exploitation
+    const ssrfFindings: Finding[] = [];
 
     context.logger.info('Starting SSRF vulnerability scan', { rootDir });
 
@@ -169,6 +175,7 @@ export class SsrfTesterPlugin implements SpearPlugin {
 
         for (const finding of this.scanContent(content, relativePath)) {
           findingsCount++;
+          ssrfFindings.push(finding);
           yield finding;
         }
       } catch (err: unknown) {
@@ -184,6 +191,59 @@ export class SsrfTesterPlugin implements SpearPlugin {
       filesScanned,
       findingsCount,
     });
+
+    // ── Aggressive Mode: SSRF Exploitation ─────────────────────
+
+    if (context.mode === 'aggressive' && ssrfFindings.length > 0) {
+      context.logger.info('Aggressive mode: generating SSRF exploitation vectors', {
+        ssrfFindingsCount: ssrfFindings.length,
+      });
+
+      const exploiter = new SsrfExploiter();
+
+      // Filter to high-value SSRF findings (sinks and metadata access patterns)
+      const exploitableFindings = ssrfFindings.filter((f) => {
+        const category = f.metadata?.['category'] as string | undefined;
+        return (
+          category === 'ssrf_sink' ||
+          category === 'metadata_access' ||
+          f.severity === 'critical' ||
+          f.severity === 'high'
+        );
+      });
+
+      // Deduplicate by file+line to avoid generating redundant exploit vectors
+      const seen = new Set<string>();
+      const deduped: Finding[] = [];
+      for (const finding of exploitableFindings) {
+        const key = `${finding.file ?? ''}:${finding.line ?? 0}:${finding.ruleId}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(finding);
+        }
+      }
+
+      context.logger.info('Generating exploit vectors', {
+        exploitableFindings: deduped.length,
+      });
+
+      let exploitFindingsCount = 0;
+
+      for (const finding of deduped) {
+        // Extract the parameter name from the pattern name if available
+        const patternName = finding.metadata?.['patternName'] as string | undefined;
+        const parameterName = extractParameterHint(patternName);
+
+        for (const exploitFinding of exploiter.generateExploitFindings(finding, parameterName)) {
+          exploitFindingsCount++;
+          yield exploitFinding;
+        }
+      }
+
+      context.logger.info('SSRF exploitation vector generation complete', {
+        exploitFindings: exploitFindingsCount,
+      });
+    }
   }
 
   /**
@@ -245,6 +305,28 @@ export class SsrfTesterPlugin implements SpearPlugin {
   async teardown(_context: PluginContext): Promise<void> {
     // No state to clean up -- all patterns are stateless.
   }
+}
+
+// ─── Helpers ───────────────────────────────────────────────────
+
+/**
+ * Extract a likely vulnerable parameter name from a pattern name hint.
+ * Used to provide more specific exploit guidance.
+ */
+function extractParameterHint(patternName: string | undefined): string | undefined {
+  if (!patternName) return undefined;
+
+  const lower = patternName.toLowerCase();
+
+  if (lower.includes('fetch')) return 'url';
+  if (lower.includes('axios')) return 'url';
+  if (lower.includes('http request')) return 'options.hostname';
+  if (lower.includes('urllib') || lower.includes('requests')) return 'url';
+  if (lower.includes('curl')) return '$_GET["url"]';
+  if (lower.includes('got') || lower.includes('needle')) return 'url';
+  if (lower.includes('redirect')) return 'redirect_url';
+
+  return undefined;
 }
 
 // ─── Directory Walker ──────────────────────────────────────────
