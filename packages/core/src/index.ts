@@ -51,3 +51,15 @@ export {
   getDefaultIgnores,
   createSpearignore,
 } from './spearignore.js';
+
+// --- Rate Limiter ---
+export {
+  RateLimiter,
+} from './rate-limiter.js';
+export type { RateLimiterConfig } from './rate-limiter.js';
+
+// --- Verification Cache ---
+export {
+  VerificationCache,
+} from './verification-cache.js';
+export type { CacheEntry } from './verification-cache.js';
