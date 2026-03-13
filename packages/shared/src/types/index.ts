@@ -88,6 +88,34 @@ export interface PluginMetadata {
   trustLevel: TrustLevel;
 }
 
+// ─── Live Attack Options ───────────────────────────────────
+
+export interface LiveAttackOptions {
+  targetUrl: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+  timeout?: number;
+  maxRequests?: number;
+  concurrency?: number;
+  endpoints?: LiveEndpoint[];
+}
+
+export interface LiveEndpoint {
+  method: string;
+  path: string;
+  auth?: string;
+  description?: string;
+}
+
+export interface LiveAttackResult {
+  payloadId: string;
+  request: { method: string; url: string; body?: string };
+  response: { status: number; body: string; headers: Record<string, string> };
+  success: boolean;
+  evidence: string;
+  durationMs: number;
+}
+
 // ─── Plugin Context ─────────────────────────────────────────
 
 export interface PluginContext {
@@ -95,6 +123,7 @@ export interface PluginContext {
   workDir: string;
   config: SpearConfig;
   logger: SpearLogger;
+  liveAttack?: LiveAttackOptions;
 }
 
 // ─── SpearPlugin Interface ──────────────────────────────────

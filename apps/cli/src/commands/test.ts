@@ -195,6 +195,9 @@ export default class Test extends Command {
         import('@wigtn/spear-21-distillation' as string).catch(() => null),
         import('@wigtn/spear-18-tls-recon' as string).catch(() => null),
         import('@wigtn/spear-22-infra-intel' as string).catch(() => null),
+        import('@wigtn/spear-23-live-prompt-inject' as string).catch(() => null),
+        import('@wigtn/spear-24-mcp-live-test' as string).catch(() => null),
+        import('@wigtn/spear-25-endpoint-prober' as string).catch(() => null),
       ]);
 
       const builtinPlugins = pluginImports
