@@ -51,6 +51,10 @@ import { discoverCloudServices, parseCloudRunUrl } from './cloud-service-discove
 import type { CloudServiceResult } from './cloud-service-discovery.js';
 import { scanOpenApi } from './openapi-scanner.js';
 import type { OpenApiScanResult, DangerousParam } from './openapi-scanner.js';
+import { scanAiInfra } from './ai-infra-scanner.js';
+import type { AiInfraResult, DiscoveredAiEndpoint } from './ai-infra-scanner.js';
+import { scanDebugEndpoints } from './debug-scanner.js';
+import type { DebugScanResult, DiscoveredDebugEndpoint } from './debug-scanner.js';
 
 // ─── Plugin Implementation ────────────────────────────────────
 
@@ -291,6 +295,134 @@ export class EndpointProberPlugin implements SpearPlugin {
           });
         }
       }
+    }
+
+    // ── Phase 3c: AI Infrastructure Scanner (LLM04 + LLM08) ──
+
+    context.logger.info('Scanning for exposed AI/ML infrastructure');
+
+    const aiInfraResult = await scanAiInfra({
+      baseUrl: context.liveAttack.targetUrl,
+      timeout: context.liveAttack.timeout ?? 5000,
+      logger: context.logger,
+    });
+
+    // ML model management endpoints (LLM04)
+    for (const ep of aiInfraResult.mlEndpoints) {
+      yield {
+        ruleId: 'spear-25/ml-endpoint-exposed',
+        severity: ep.writeable ? 'critical' : 'high',
+        message:
+          `ML infrastructure exposed: ${ep.service} at ${ep.url} — ${ep.exposure}`,
+        cvss: ep.writeable ? 9.1 : 7.5,
+        mitreTechniques: ['T1195'],
+        remediation:
+          `Restrict access to ${ep.service} management endpoints. ` +
+          'Add authentication and limit network access to internal services only.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'ml_endpoint_exposed',
+          owaspLlm: 'LLM04',
+          service: ep.service,
+          url: ep.url,
+          unauthenticated: ep.unauthenticated,
+          writeable: ep.writeable,
+          evidence: ep.evidence.slice(0, 300),
+          analysisType: 'live',
+        },
+      };
+    }
+
+    // Vector DB endpoints (LLM08)
+    for (const ep of aiInfraResult.vectorDbEndpoints) {
+      yield {
+        ruleId: 'spear-25/vector-db-exposed',
+        severity: ep.writeable ? 'critical' : 'high',
+        message:
+          `Vector database exposed: ${ep.service} at ${ep.url} — ${ep.exposure}`,
+        cvss: ep.writeable ? 9.1 : 7.5,
+        mitreTechniques: ['T1195'],
+        remediation:
+          `Restrict access to ${ep.service} vector database. ` +
+          'Add authentication, enable TLS, and limit to internal network only. ' +
+          'Exposed vector DBs allow RAG poisoning attacks.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'vector_db_exposed',
+          owaspLlm: 'LLM08',
+          service: ep.service,
+          url: ep.url,
+          unauthenticated: ep.unauthenticated,
+          writeable: ep.writeable,
+          evidence: ep.evidence.slice(0, 300),
+          analysisType: 'live',
+        },
+      };
+    }
+
+    // ── Phase 3d: Debug & Logging Scanner (A09) ────────────────
+
+    context.logger.info('Scanning for exposed debug/logging endpoints');
+
+    const debugResult = await scanDebugEndpoints({
+      baseUrl: context.liveAttack.targetUrl,
+      timeout: context.liveAttack.timeout ?? 5000,
+      logger: context.logger,
+    });
+
+    for (const ep of debugResult.endpoints) {
+      const severityMap: Record<string, Severity> = {
+        environment: 'critical',
+        profiling: 'high',
+        debug: 'high',
+        monitoring: 'medium',
+        logging: 'high',
+        sourcemap: 'medium',
+        introspection: 'medium',
+        admin: 'high',
+      };
+
+      yield {
+        ruleId: `spear-25/debug-${ep.category}-exposed`,
+        severity: severityMap[ep.category] ?? 'medium',
+        message: `Debug/logging endpoint exposed: ${ep.service} at ${ep.url} — ${ep.exposure}`,
+        cvss: ep.category === 'environment' ? 9.1 : 6.5,
+        mitreTechniques: ['T1592'],
+        remediation:
+          `Remove or restrict access to ${ep.url} in production. ` +
+          'Debug and monitoring endpoints should never be publicly accessible.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: `debug_${ep.category}`,
+          owaspWeb: 'A09',
+          service: ep.service,
+          url: ep.url,
+          evidence: ep.evidence.slice(0, 300),
+          analysisType: 'live',
+        },
+      };
+    }
+
+    // Stack trace leakage finding
+    if (debugResult.stackTraceLeaked) {
+      yield {
+        ruleId: 'spear-25/stack-trace-leaked',
+        severity: 'medium',
+        message:
+          'Error responses leak stack traces — internal code paths and dependencies exposed',
+        cvss: 5.3,
+        mitreTechniques: ['T1592'],
+        remediation:
+          'Configure error handling to return generic error messages in production. ' +
+          'Never expose stack traces, file paths, or internal details to users.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'stack_trace_leakage',
+          owaspWeb: 'A09',
+          evidence: debugResult.stackTraceEvidence?.slice(0, 300),
+          analysisType: 'live',
+        },
+      };
     }
 
     const probeEngine = new ProbeEngine(context.liveAttack, context.logger);
