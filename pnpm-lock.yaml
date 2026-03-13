@@ -222,6 +222,38 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/plugins/spear-11-cicd-exploiter:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/plugins/spear-13-cloud-credential:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/plugins/spear-17-llm-exploiter:
     dependencies:
       '@wigtn/core':

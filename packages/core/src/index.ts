@@ -63,3 +63,14 @@ export {
   VerificationCache,
 } from './verification-cache.js';
 export type { CacheEntry } from './verification-cache.js';
+
+// --- Security Score Calculator ---
+export {
+  calculateSecurityScore,
+} from './security-score.js';
+export type {
+  SecurityScoreResult,
+  SecurityGrade,
+  SeverityBreakdown,
+  ModuleBreakdown,
+} from './security-score.js';

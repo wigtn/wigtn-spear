@@ -64,26 +64,26 @@
 
 ### Phase 3: Infrastructure Modules + Dashboard (3주)
 
-- [ ] **Spear-11: CI/CD Pipeline Exploit** - YAML 워크플로우 파서
-- [ ] **Spear-11: CI/CD Pipeline Exploit** - Expression 인젝션 탐지
-- [ ] **Spear-11: CI/CD Pipeline Exploit** - SHA 핀닝 감사
-- [ ] **Spear-11: CI/CD Pipeline Exploit** - pull_request_target 탐지
-- [ ] **Spear-11: CI/CD Pipeline Exploit** - OIDC 설정 스캐너
-- [ ] **Spear-13: Cloud Credential Chain** - AWS 크레덴셜 스캐너
-- [ ] **Spear-13: Cloud Credential Chain** - GCP 서비스 계정 스캐너
-- [ ] **Spear-13: Cloud Credential Chain** - Azure 크레덴셜 스캐너
-- [ ] **Spear-13: Cloud Credential Chain** - IMDS 접근 테스터
-- [ ] **Spear-13: Cloud Credential Chain** - IAM 역할 체인 매퍼
-- [ ] spear audit CLI 명령어
-- [ ] Web Dashboard: 프로젝트 구조 + 라우팅
-- [ ] Web Dashboard: 스캔 결과 대시보드 페이지
-- [ ] Web Dashboard: 스캔 히스토리 페이지
-- [ ] Web Dashboard: Security Score 페이지
-- [ ] Web Dashboard: Attack Chain 시각화
-- [ ] Dashboard REST API 구현
-- [ ] HTML 리포트 생성기
+- [x] **Spear-11: CI/CD Pipeline Exploit** - YAML 워크플로우 파서
+- [x] **Spear-11: CI/CD Pipeline Exploit** - Expression 인젝션 탐지
+- [x] **Spear-11: CI/CD Pipeline Exploit** - SHA 핀닝 감사
+- [x] **Spear-11: CI/CD Pipeline Exploit** - pull_request_target 탐지
+- [x] **Spear-11: CI/CD Pipeline Exploit** - OIDC 설정 스캐너
+- [x] **Spear-13: Cloud Credential Chain** - AWS 크레덴셜 스캐너
+- [x] **Spear-13: Cloud Credential Chain** - GCP 서비스 계정 스캐너
+- [x] **Spear-13: Cloud Credential Chain** - Azure 크레덴셜 스캐너
+- [x] **Spear-13: Cloud Credential Chain** - IMDS 접근 테스터
+- [x] **Spear-13: Cloud Credential Chain** - IAM 역할 체인 매퍼
+- [x] spear audit CLI 명령어
+- [ ] Web Dashboard: 프로젝트 구조 + 라우팅 → Phase 5로 연기
+- [ ] Web Dashboard: 스캔 결과 대시보드 페이지 → Phase 5로 연기
+- [ ] Web Dashboard: 스캔 히스토리 페이지 → Phase 5로 연기
+- [ ] Web Dashboard: Security Score 페이지 → Phase 5로 연기
+- [ ] Web Dashboard: Attack Chain 시각화 → Phase 5로 연기
+- [ ] Dashboard REST API 구현 → Phase 5로 연기
+- [x] HTML 리포트 생성기
 - [ ] Remediation Playbook 생성기
-- [ ] CVSS 기반 Security Score 계산기
+- [x] CVSS 기반 Security Score 계산기
 - [ ] 단위 + 통합 테스트
 
 **Deliverable**: 인프라 모듈 + 웹 대시보드 동작
@@ -129,8 +129,8 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Tasks | 36/83 |
-| Current Phase | Phase 2 진행중 |
+| Total Tasks | 49/83 |
+| Current Phase | Phase 3 완료, Phase 4 진행 예정 |
 | Status | in_progress |
 
 ## Execution Log
@@ -158,3 +158,8 @@
 | 2026-03-13 13:04 | Phase 2 | spear test / spear fuzz CLI commands | completed |
 | 2026-03-13 13:34 | Phase 2 | 빌드 검증 (13/13 packages, 0 errors) | completed |
 | 2026-03-13 13:34 | Phase 2 | 테스트 검증 (154/154 passed, 0 regressions) | completed |
+| 2026-03-13 13:46 | Phase 3 | Spear-11 CI/CD Exploiter (65 patterns, 8 categories, 5 scanners) | completed |
+| 2026-03-13 13:46 | Phase 3 | Spear-13 Cloud Credential Chain (65 patterns, AWS/GCP/Azure/IMDS/IAM) | completed |
+| 2026-03-13 13:46 | Phase 3 | spear audit CLI + HTML Reporter + CVSS Security Score | completed |
+| 2026-03-13 13:46 | Phase 3 | 빌드 검증 (15/15 packages, 0 errors) | completed |
+| 2026-03-13 13:46 | Phase 3 | 테스트 검증 (154/154 passed, 0 regressions) | completed |
