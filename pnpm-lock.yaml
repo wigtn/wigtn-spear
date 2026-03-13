@@ -174,6 +174,22 @@ importers:
         specifier: ^1.4.0
         version: 1.6.1(@types/node@20.19.37)
 
+  packages/plugins/spear-03-env-exfil:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/plugins/spear-04-mcp-poisoner:
     dependencies:
       '@wigtn/core':
@@ -190,7 +206,39 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/plugins/spear-05-dep-confusion:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/plugins/spear-06-prompt-injector:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/plugins/spear-08-supply-chain:
     dependencies:
       '@wigtn/core':
         specifier: workspace:*
@@ -238,6 +286,22 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/plugins/spear-12-container-audit:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/plugins/spear-13-cloud-credential:
     dependencies:
       '@wigtn/core':
@@ -254,7 +318,87 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/plugins/spear-14-ssrf-tester:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/plugins/spear-15-ide-audit:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/plugins/spear-16-webhook-scanner:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/plugins/spear-17-llm-exploiter:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/plugins/spear-19-social-eng:
+    dependencies:
+      '@wigtn/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/plugins/spear-21-distillation:
     dependencies:
       '@wigtn/core':
         specifier: workspace:*
@@ -314,6 +458,19 @@ importers:
       vitest:
         specifier: ^1.4.0
         version: 1.6.1(@types/node@20.19.37)
+
+  packages/shield-integration:
+    dependencies:
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
 packages:
 
