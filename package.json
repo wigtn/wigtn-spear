@@ -1,0 +1,27 @@
+{
+  "name": "wigtn-spear",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WIGTN-SPEAR: Offensive Security Testing Tool for AI/MCP Era",
+  "author": "WIGTN Hackathon Team 2",
+  "license": "MIT",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean",
+    "db:generate": "turbo run db:generate --filter=@wigtn/db",
+    "db:migrate": "turbo run db:migrate --filter=@wigtn/db"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

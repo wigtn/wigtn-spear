@@ -1,0 +1,39 @@
+{
+  "name": "@wigtn/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "spear": "./bin/run.js" },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "dev": "node --loader ts-node/esm ./bin/dev.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@wigtn/shared": "workspace:*",
+    "@wigtn/core": "workspace:*",
+    "@wigtn/db": "workspace:*",
+    "@wigtn/plugin-system": "workspace:*",
+    "@wigtn/rules-engine": "workspace:*",
+    "@wigtn/reporters": "workspace:*",
+    "drizzle-orm": "^0.30.0",
+    "@oclif/core": "^3.26.0",
+    "@oclif/plugin-help": "^6.0.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0"
+  },
+  "oclif": {
+    "bin": "spear",
+    "dirname": "wigtn-spear",
+    "commands": "./dist/commands",
+    "plugins": ["@oclif/plugin-help"],
+    "topicSeparator": " "
+  }
+}

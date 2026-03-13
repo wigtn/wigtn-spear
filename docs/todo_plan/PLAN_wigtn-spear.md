@@ -16,26 +16,26 @@
 
 ### Phase 1: Core Engine + MVP Modules (4주)
 
-- [ ] 프로젝트 스캐폴딩 (Turborepo 모노레포 + 패키지 구조)
-- [ ] oclif CLI 앱 초기화 (init, scan, report, config 명령어)
-- [ ] Vite + React 19 대시보드 앱 초기화
-- [ ] Core Engine: Aho-Corasick 키워드 프리필터
-- [ ] Core Engine: Regex 패턴 매칭 (800+ 패턴)
-- [ ] Core Engine: Shannon 엔트로피 분석
-- [ ] Core Engine: Worker Thread 병렬 처리 풀
-- [ ] Core Engine: AsyncGenerator 스트리밍 파이프라인
-- [ ] Plugin Interface 정의 + 로더 구현
-- [ ] YAML Rules Engine (GitLeaks TOML 호환)
-- [ ] SQLite DB + Drizzle ORM 스키마 마이그레이션
-- [ ] **Spear-01: Secret Scanner** 플러그인 구현
-- [ ] **Spear-02: Git History Miner** 플러그인 구현
-- [ ] SARIF 2.1.0 리포터
-- [ ] JSON 리포터
-- [ ] Safe Mode / Aggressive Mode 분기 로직
-- [ ] .spearignore 파일 파서
-- [ ] 시크릿 마스킹 유틸리티
-- [ ] 감사 로그 기록
-- [ ] 단위 테스트 (Core Engine)
+- [x] 프로젝트 스캐폴딩 (Turborepo 모노레포 + 패키지 구조)
+- [x] oclif CLI 앱 초기화 (init, scan, report, config 명령어)
+- [ ] Vite + React 19 대시보드 앱 초기화 → Phase 3으로 연기
+- [x] Core Engine: Aho-Corasick 키워드 프리필터
+- [x] Core Engine: Regex 패턴 매칭 (800+ 패턴)
+- [x] Core Engine: Shannon 엔트로피 분석
+- [x] Core Engine: Worker Thread 병렬 처리 풀
+- [x] Core Engine: AsyncGenerator 스트리밍 파이프라인
+- [x] Plugin Interface 정의 + 로더 구현
+- [x] YAML Rules Engine (GitLeaks TOML 호환)
+- [x] SQLite DB + Drizzle ORM 스키마 마이그레이션
+- [x] **Spear-01: Secret Scanner** 플러그인 구현
+- [x] **Spear-02: Git History Miner** 플러그인 구현
+- [x] SARIF 2.1.0 리포터
+- [x] JSON 리포터
+- [x] Safe Mode / Aggressive Mode 분기 로직
+- [x] .spearignore 파일 파서
+- [x] 시크릿 마스킹 유틸리티
+- [x] 감사 로그 기록
+- [x] 단위 테스트 (Core Engine)
 
 **Deliverable**: `npm install -g wigtn-spear && spear scan` 동작
 
@@ -129,12 +129,24 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Tasks | 0/83 |
-| Current Phase | - |
-| Status | pending |
+| Total Tasks | 19/83 |
+| Current Phase | Phase 1 완료 |
+| Status | in_progress |
 
 ## Execution Log
 
 | Timestamp | Phase | Task | Status |
 |-----------|-------|------|--------|
-| - | - | - | - |
+| 2026-03-13 12:20 | Phase 1 | 프로젝트 스캐폴딩 (Turborepo) | completed |
+| 2026-03-13 12:25 | Phase 1 | oclif CLI 앱 초기화 | completed |
+| 2026-03-13 12:30 | Phase 1 | Core Engine 전체 (AC, Regex, Entropy, Worker, Pipeline) | completed |
+| 2026-03-13 12:32 | Phase 1 | Plugin Interface + 로더 | completed |
+| 2026-03-13 12:33 | Phase 1 | YAML Rules Engine + 5 rule files | completed |
+| 2026-03-13 12:33 | Phase 1 | SQLite DB + Drizzle ORM 스키마 | completed |
+| 2026-03-13 12:35 | Phase 1 | Spear-01 Secret Scanner | completed |
+| 2026-03-13 12:35 | Phase 1 | Spear-02 Git History Miner | completed |
+| 2026-03-13 12:36 | Phase 1 | SARIF + JSON 리포터 | completed |
+| 2026-03-13 12:36 | Phase 1 | Safe/Aggressive 분기, .spearignore, 마스킹, 감사로그 | completed |
+| 2026-03-13 12:40 | Phase 1 | 단위 테스트 (154 tests, 6 files) | completed |
+| 2026-03-13 12:48 | Phase 1 | 빌드 검증 (9/9 packages, 0 errors) | completed |
+| 2026-03-13 12:48 | Phase 1 | 테스트 검증 (154/154 passed) | completed |
