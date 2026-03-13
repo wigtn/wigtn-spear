@@ -55,6 +55,10 @@ import { scanAiInfra } from './ai-infra-scanner.js';
 import type { AiInfraResult, DiscoveredAiEndpoint } from './ai-infra-scanner.js';
 import { scanDebugEndpoints } from './debug-scanner.js';
 import type { DebugScanResult, DiscoveredDebugEndpoint } from './debug-scanner.js';
+import { analyzeJsBundles } from './js-bundle-analyzer.js';
+import type { JsBundleResult, DiscoveredSecret, DiscoveredSourceMap } from './js-bundle-analyzer.js';
+import { analyzeHttpHeaders } from './http-header-analyzer.js';
+import type { HeaderAnalysisResult, MissingHeader, InsecureCookie } from './http-header-analyzer.js';
 
 // ─── Plugin Implementation ────────────────────────────────────
 
@@ -420,6 +424,231 @@ export class EndpointProberPlugin implements SpearPlugin {
           category: 'stack_trace_leakage',
           owaspWeb: 'A09',
           evidence: debugResult.stackTraceEvidence?.slice(0, 300),
+          analysisType: 'live',
+        },
+      };
+    }
+
+    // ── Phase 3e: JS Bundle Analyzer ────────────────────────────
+
+    context.logger.info('Analyzing JavaScript bundles');
+
+    const jsBundleResult = await analyzeJsBundles({
+      baseUrl: context.liveAttack.targetUrl,
+      timeout: context.liveAttack.timeout ?? 10000,
+      logger: context.logger,
+    });
+
+    // Secrets found in JS bundles
+    for (const secret of jsBundleResult.secrets) {
+      yield {
+        ruleId: 'spear-25/js-secret-exposed',
+        severity: 'critical',
+        message:
+          `Hardcoded secret in JavaScript bundle: ${secret.pattern} — ${secret.masked} ` +
+          `found in ${secret.scriptUrl}`,
+        cvss: 9.1,
+        mitreTechniques: ['T1552'],
+        remediation:
+          'Never embed API keys or secrets in frontend JavaScript. ' +
+          'Use server-side proxying or environment-specific configuration. ' +
+          'Rotate this credential immediately.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'js_secret_exposed',
+          secretType: secret.type,
+          masked: secret.masked,
+          scriptUrl: secret.scriptUrl,
+          context: secret.context,
+          analysisType: 'live',
+        },
+      };
+    }
+
+    // Accessible source maps
+    for (const sourceMap of jsBundleResult.sourceMaps) {
+      if (!sourceMap.accessible) continue;
+
+      yield {
+        ruleId: 'spear-25/sourcemap-exposed',
+        severity: 'high',
+        message:
+          `Source map publicly accessible: ${sourceMap.url} ` +
+          `(${sourceMap.sourceCount ?? '?'} source files, ${sourceMap.size ?? 0} bytes)`,
+        cvss: 7.5,
+        mitreTechniques: ['T1592'],
+        remediation:
+          'Remove source maps from production deployment. ' +
+          'Configure build tool to disable sourcemap generation for production builds. ' +
+          'Source maps expose original source code, internal paths, and variable names.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'sourcemap_exposed',
+          owaspWeb: 'A05',
+          url: sourceMap.url,
+          size: sourceMap.size,
+          sourceCount: sourceMap.sourceCount,
+          sources: sourceMap.sources?.slice(0, 20),
+          analysisType: 'live',
+        },
+      };
+    }
+
+    // API endpoints discovered in JS
+    for (const endpoint of jsBundleResult.endpoints) {
+      if (endpoint.category === 'internal' || endpoint.category === 'websocket') {
+        yield {
+          ruleId: 'spear-25/js-internal-url',
+          severity: endpoint.category === 'internal' ? 'high' : 'medium',
+          message:
+            `${endpoint.category === 'internal' ? 'Internal service' : 'WebSocket'} URL exposed in JavaScript: ${endpoint.url}`,
+          cvss: endpoint.category === 'internal' ? 7.5 : 5.3,
+          mitreTechniques: ['T1592'],
+          remediation:
+            'Do not embed internal service URLs or WebSocket endpoints in frontend code. ' +
+            'Use relative paths or server-side configuration.',
+          metadata: {
+            pluginId: 'endpoint-prober',
+            category: `js_${endpoint.category}_url`,
+            url: endpoint.url,
+            scriptUrl: endpoint.scriptUrl,
+            analysisType: 'live',
+          },
+        };
+      }
+
+      // Add discovered API endpoints to probe list
+      if (endpoint.category === 'api') {
+        try {
+          const parsed = new URL(endpoint.url, context.liveAttack.targetUrl);
+          // Only add if same origin
+          const targetOrigin = new URL(context.liveAttack.targetUrl).origin;
+          if (parsed.origin === targetOrigin) {
+            const key = `GET:${parsed.pathname}`;
+            if (!endpointsToProbeKeys.has(key)) {
+              endpointsToProbeKeys.add(key);
+              additionalEndpoints.push({ method: 'GET', path: parsed.pathname });
+            }
+          }
+        } catch {
+          // Invalid URL, skip
+        }
+      }
+    }
+
+    // ── Phase 3f: HTTP Security Header Analysis ─────────────────
+
+    context.logger.info('Analyzing HTTP security headers');
+
+    const headerResult = await analyzeHttpHeaders({
+      baseUrl: context.liveAttack.targetUrl,
+      timeout: context.liveAttack.timeout ?? 10000,
+      logger: context.logger,
+    });
+
+    // Missing security headers
+    for (const missing of headerResult.missingHeaders) {
+      yield {
+        ruleId: 'spear-25/missing-security-header',
+        severity: missing.severity,
+        message: `Missing security header: ${missing.header} — ${missing.impact}`,
+        cvss: missing.severity === 'critical' ? 8.1 : missing.severity === 'high' ? 6.5 : 4.3,
+        mitreTechniques: ['T1189'],
+        remediation:
+          `Add the ${missing.header} header to all responses. ` +
+          `Recommended value: ${missing.recommended}`,
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'missing_security_header',
+          owaspWeb: 'A05',
+          header: missing.header,
+          recommended: missing.recommended,
+          analysisType: 'live',
+        },
+      };
+    }
+
+    // Insecure cookies
+    for (const cookie of headerResult.insecureCookies) {
+      yield {
+        ruleId: 'spear-25/insecure-cookie',
+        severity: 'medium',
+        message:
+          `Insecure cookie: "${cookie.name}" missing ${cookie.missingFlags.join(', ')} — ${cookie.impact}`,
+        cvss: 5.3,
+        mitreTechniques: ['T1539'],
+        remediation:
+          `Set ${cookie.missingFlags.join(', ')} flags on the "${cookie.name}" cookie. ` +
+          'All session cookies should have HttpOnly, Secure, and SameSite=Strict or Lax.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'insecure_cookie',
+          owaspWeb: 'A05',
+          cookieName: cookie.name,
+          missingFlags: cookie.missingFlags,
+          raw: cookie.raw,
+          analysisType: 'live',
+        },
+      };
+    }
+
+    // Information leakage
+    for (const leak of headerResult.infoLeaks) {
+      yield {
+        ruleId: 'spear-25/header-info-leak',
+        severity: 'low',
+        message:
+          `Information leakage via ${leak.header} header: "${leak.value}" — reveals ${leak.reveals}`,
+        cvss: 3.7,
+        mitreTechniques: ['T1592'],
+        remediation:
+          `Remove or suppress the ${leak.header} header in production. ` +
+          'Revealing server software and versions aids attackers in finding known vulnerabilities.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'header_info_leak',
+          owaspWeb: 'A05',
+          header: leak.header,
+          value: leak.value,
+          analysisType: 'live',
+        },
+      };
+    }
+
+    // CORS issues
+    for (const cors of headerResult.corsIssues) {
+      const corsSeverity = cors.type === 'credentials_with_wildcard' ? 'critical' : 'medium';
+      yield {
+        ruleId: 'spear-25/cors-misconfiguration',
+        severity: corsSeverity as Severity,
+        message: `CORS misconfiguration: ${cors.description}`,
+        cvss: corsSeverity === 'critical' ? 9.1 : 5.3,
+        mitreTechniques: ['T1189'],
+        remediation:
+          'Configure CORS to allow only specific trusted origins. ' +
+          'Never combine Access-Control-Allow-Origin: * with Access-Control-Allow-Credentials: true.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'cors_misconfiguration',
+          owaspWeb: 'A05',
+          type: cors.type,
+          evidence: cors.evidence,
+          analysisType: 'live',
+        },
+      };
+    }
+
+    // Technology fingerprint (informational)
+    if (headerResult.fingerprint.technologies.length > 0) {
+      yield {
+        ruleId: 'spear-25/tech-fingerprint',
+        severity: 'info',
+        message:
+          `Technology fingerprint: ${headerResult.fingerprint.technologies.join(', ')}`,
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'tech_fingerprint',
+          fingerprint: headerResult.fingerprint,
           analysisType: 'live',
         },
       };

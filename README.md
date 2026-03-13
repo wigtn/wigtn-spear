@@ -180,6 +180,8 @@ wigtn-spear/
 │           ├── openapi-scanner.ts          # Swagger/OpenAPI auto-discovery
 │           ├── ai-infra-scanner.ts         # MLflow, vector DB scanning
 │           ├── debug-scanner.ts            # Debug/logging endpoint scan
+│           ├── js-bundle-analyzer.ts       # Frontend JS secret extraction
+│           ├── http-header-analyzer.ts     # Security header & cookie audit
 │           └── probe-engine.ts             # Live HTTP auth probing
 └── turbo.json
 ```
@@ -201,6 +203,28 @@ wigtn-spear/
 | Endpoint probe | $0 | HTTP requests to target (no third-party API) |
 | Prompt injection (HTTP) | $0.01-$0.50 | Sends requests to LLM API (uses target's key or your own) |
 | Prompt injection (Relay) | $0 to us | Cost goes to target's Twilio/OpenAI account |
+
+## Source-Code-Free Scanning
+
+SPEAR can scan targets **without source code access**. Just give it a URL:
+
+```bash
+spear attack https://target.com --module endpoint-prober
+```
+
+| Feature | What It Does |
+|---------|-------------|
+| JS Bundle Analysis | Downloads frontend JS, extracts hardcoded API keys, tokens, internal URLs |
+| Source Map Recovery | Finds `.js.map` files, recovers original source code |
+| HTTP Security Headers | Checks CSP, HSTS, X-Frame-Options, cookie flags, CORS |
+| Tech Fingerprinting | Identifies server, framework, CDN, runtime from headers |
+| OpenAPI Discovery | Finds exposed Swagger/OpenAPI docs |
+| AI Infra Scan | Detects exposed MLflow, Qdrant, Chroma, vector DBs |
+| Debug Endpoint Scan | Finds `/actuator`, `/.env`, `/debug/pprof`, admin panels |
+
+### Roadmap: Site Crawler (Planned)
+
+Automatic endpoint discovery via HTML/JS crawling. Will feed discovered URLs into the existing scanner pipeline for comprehensive coverage without source code.
 
 ## Team
 
