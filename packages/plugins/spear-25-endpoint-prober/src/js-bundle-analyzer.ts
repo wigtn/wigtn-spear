@@ -153,6 +153,41 @@ const SECRET_PATTERNS: readonly SecretPattern[] = [
 
   // GitHub
   { name: 'GitHub Token', type: 'github_token', regex: /gh[ps]_[A-Za-z0-9_]{36,}/ },
+
+  // ─── Korean Services ────────────────────────────────────────
+
+  // Kakao
+  { name: 'Kakao JavaScript Key', type: 'kakao_js_key', regex: /(?:Kakao\.init|kakaoJsKey|KAKAO_JS_KEY|kakao_js_key|javascript_key)\s*\(\s*["']([a-f0-9]{32})["']/ },
+  { name: 'Kakao REST API Key', type: 'kakao_rest_key', regex: /(?:KAKAO_REST_KEY|kakao_rest_key|kakaoRestKey|rest_api_key|Authorization:\s*KakaoAK\s+)["']?([a-f0-9]{32})/ },
+  { name: 'Kakao Admin Key', type: 'kakao_admin_key', regex: /(?:KAKAO_ADMIN_KEY|kakao_admin_key|kakaoAdminKey|admin_key)\s*[:=]\s*["']([a-f0-9]{32})/ },
+  { name: 'Kakao Token (Generic)', type: 'kakao_token', regex: /(?:token|appKey|jsKey)\s*[:=]\s*["']([a-f0-9]{32})["']/ },
+
+  // Naver
+  { name: 'Naver Maps Client ID', type: 'naver_maps_id', regex: /ncpClientId[=:]["']?([a-zA-Z0-9]{15,25})/ },
+  { name: 'Naver Client ID', type: 'naver_client_id', regex: /(?:NAVER_CLIENT_ID|naver_client_id|naverClientId|X-Naver-Client-Id)\s*[:=]\s*["']([a-zA-Z0-9_-]{15,30})/ },
+  { name: 'Naver Client Secret', type: 'naver_client_secret', regex: /(?:NAVER_CLIENT_SECRET|naver_client_secret|naverClientSecret|X-Naver-Client-Secret)\s*[:=]\s*["']([a-zA-Z0-9_-]{10,30})/ },
+
+  // Toss Payments
+  { name: 'Toss Client Key', type: 'toss_client_key', regex: /(?:test_ck|live_ck)_[a-zA-Z0-9]{20,}/ },
+  { name: 'Toss Secret Key', type: 'toss_secret_key', regex: /(?:test_sk|live_sk)_[a-zA-Z0-9]{20,}/ },
+
+  // PortOne (formerly I'mport)
+  { name: 'PortOne Merchant ID', type: 'portone_merchant', regex: /(?:imp_uid|merchantId|IMP\.init)\s*\(\s*["'](imp_[0-9]{8,})["']/ },
+  { name: 'PortOne Store ID', type: 'portone_store', regex: /(?:storeId|store_id)\s*[:=]\s*["'](store-[a-f0-9-]{36})["']/ },
+
+  // NHN Cloud / Toast
+  { name: 'NHN App Key', type: 'nhn_app_key', regex: /(?:NHN_APP_KEY|nhn_app_key|appKey|toast_app_key)\s*[:=]\s*["']([a-zA-Z0-9]{32})["']/ },
+
+  // Channel Talk
+  { name: 'Channel Talk Plugin Key', type: 'channel_talk_key', regex: /(?:pluginKey|channel_plugin_key)\s*[:=]\s*["']([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})["']/ },
+
+  // Sentry DSN
+  { name: 'Sentry DSN', type: 'sentry_dsn', regex: /https:\/\/[a-f0-9]{32}@[a-z0-9]+\.ingest\.sentry\.io\/[0-9]+/ },
+
+  // ─── Korean OAuth Providers (hardcoded in JSX) ──────────────
+
+  // Detect hardcoded clientId in React/JSX component props (Korean login SDKs)
+  { name: 'JSX Hardcoded Client ID', type: 'jsx_hardcoded_client_id', regex: /(?:clientId|appId|appKey)\s*[:=]\s*["']([a-zA-Z0-9_-]{15,50})["']\s*[,})\]]/ },
 ];
 
 // ─── Endpoint Patterns ────────────────────────────────────────
@@ -175,6 +210,14 @@ const ENDPOINT_PATTERNS: readonly { regex: RegExp; category: DiscoveredJsEndpoin
   { regex: /["'`](https?:\/\/[^"'`\s]*?\.run\.app[^"'`\s]*?)["'`]/g, category: 'external' },
   { regex: /["'`](https?:\/\/[^"'`\s]*?\.cloudfunctions\.net[^"'`\s]*?)["'`]/g, category: 'external' },
   { regex: /["'`](https?:\/\/[^"'`\s]*?\.amazonaws\.com[^"'`\s]*?)["'`]/g, category: 'external' },
+
+  // Korean service API endpoints
+  { regex: /["'`](https?:\/\/[^"'`\s]*?kapi\.kakao\.com[^"'`\s]*?)["'`]/g, category: 'api' },
+  { regex: /["'`](https?:\/\/[^"'`\s]*?kauth\.kakao\.com[^"'`\s]*?)["'`]/g, category: 'api' },
+  { regex: /["'`](https?:\/\/[^"'`\s]*?openapi\.naver\.com[^"'`\s]*?)["'`]/g, category: 'api' },
+  { regex: /["'`](https?:\/\/[^"'`\s]*?openapi\.map\.naver\.com[^"'`\s]*?)["'`]/g, category: 'api' },
+  { regex: /["'`](https?:\/\/[^"'`\s]*?api\.tosspayments\.com[^"'`\s]*?)["'`]/g, category: 'api' },
+  { regex: /["'`](https?:\/\/[^"'`\s]*?api\.iamport\.kr[^"'`\s]*?)["'`]/g, category: 'api' },
 ];
 
 // ─── Scanner ──────────────────────────────────────────────────
@@ -537,6 +580,9 @@ function isNoiseUrl(url: string): boolean {
   if (url.includes('cdnjs.cloudflare.com')) return true;
   if (url.includes('fonts.googleapis.com')) return true;
   if (url.includes('www.google-analytics.com')) return true;
+  if (url.includes('t1.daumcdn.net')) return true;
+  if (url.includes('developers.kakao.com')) return true;
+  if (url.includes('openapi.map.naver.com/openapi/v3/maps.js')) return true; // Naver Maps SDK loader
   if (/^\/[a-z]$/.test(url)) return true; // Single-letter paths
   return false;
 }
