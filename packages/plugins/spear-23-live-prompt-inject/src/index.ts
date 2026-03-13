@@ -50,6 +50,7 @@ import { RateLimiter } from '@wigtn/core';
 
 import { PAYLOADS, PAYLOAD_COUNT, type InjectionPayload } from './payloads.js';
 import { LLMHttpClient } from './http-client.js';
+import { WsAttackClient, isWebSocketUrl, detectWsPreset } from './ws-client.js';
 import { analyzeResponse, analyzeErrorResponse, type AnalysisResult } from './response-analyzer.js';
 
 // ─── Constants ──────────────────────────────────────────────
@@ -373,7 +374,12 @@ class LivePromptInjectPlugin implements SpearPlugin {
     const isLiveMode = context.mode === 'aggressive' && !!context.liveAttack;
 
     if (isLiveMode) {
-      yield* this.runLiveAttack(context);
+      const targetUrl = context.liveAttack!.targetUrl;
+      if (isWebSocketUrl(targetUrl)) {
+        yield* this.runWsLiveAttack(context);
+      } else {
+        yield* this.runLiveAttack(context);
+      }
     } else {
       yield* this.runStaticScan(target, context);
     }
@@ -560,6 +566,146 @@ class LivePromptInjectPlugin implements SpearPlugin {
         : '0%',
     });
   }
+
+  // ─── WebSocket Live Attack ──────────────────────────────────
+
+  /**
+   * Execute live prompt injection over WebSocket connections.
+   *
+   * Used for relay-style AI services (e.g., WIGVO) that accept user
+   * text via WebSocket and return LLM-generated responses as captions.
+   *
+   * Attack flow:
+   *   1. Probe WebSocket endpoint for reachability
+   *   2. For each payload: connect, send text_input, collect captions
+   *   3. Analyze collected text with the same indicator engine as HTTP mode
+   *   4. Yield Finding for each successful injection
+   */
+  private async *runWsLiveAttack(
+    context: PluginContext,
+  ): AsyncGenerator<Finding> {
+    const liveAttack = context.liveAttack!;
+    const maxRequests = liveAttack.maxRequests ?? PAYLOAD_COUNT;
+    const timeout = liveAttack.timeout ?? DEFAULT_TIMEOUT_MS;
+
+    // Auto-detect protocol preset from URL
+    const preset = detectWsPreset(liveAttack.targetUrl);
+
+    const client = new WsAttackClient({
+      url: liveAttack.targetUrl,
+      timeout,
+      responseWaitMs: 5000,
+      preset,
+      logger: context.logger,
+    });
+
+    // Probe connectivity first
+    const probe = await client.probe();
+    if (!probe.reachable) {
+      context.logger.error('spear-23: WebSocket endpoint unreachable', {
+        url: liveAttack.targetUrl,
+        error: probe.error,
+      });
+      return;
+    }
+
+    context.logger.info('spear-23: WebSocket endpoint reachable', {
+      url: liveAttack.targetUrl,
+      preset,
+      latencyMs: probe.latencyMs,
+    });
+
+    const payloadsToRun = PAYLOADS.slice(0, maxRequests);
+
+    context.logger.info('spear-23: starting WebSocket live attack', {
+      targetUrl: liveAttack.targetUrl,
+      preset,
+      payloadCount: payloadsToRun.length,
+      timeout,
+    });
+
+    let succeeded = 0;
+    let failed = 0;
+    let errors = 0;
+
+    for (let i = 0; i < payloadsToRun.length; i++) {
+      const payload = payloadsToRun[i]!;
+
+      context.logger.debug('spear-23: WS payload', {
+        index: i + 1,
+        total: payloadsToRun.length,
+        payloadId: payload.id,
+        category: payload.category,
+      });
+
+      // Acquire rate limiter slot
+      if (this.rateLimiter) {
+        await this.rateLimiter.acquire(RATE_LIMITER_SERVICE);
+      }
+
+      try {
+        const result = await client.sendPayload(payload.userMessage);
+
+        if (!result.connected) {
+          errors++;
+          context.logger.debug('spear-23: WS connection failed', {
+            payloadId: payload.id,
+            error: result.error,
+          });
+          continue;
+        }
+
+        if (result.responseText) {
+          // Analyze collected WS response text the same way as HTTP
+          const analysis = analyzeResponse(payload, result.responseText);
+
+          context.logger.debug('spear-23: WS analysis complete', {
+            payloadId: payload.id,
+            succeeded: analysis.injectionSucceeded,
+            confidence: analysis.confidence,
+            fragments: result.fragments.length,
+            durationMs: result.durationMs,
+          });
+
+          if (analysis.injectionSucceeded) {
+            succeeded++;
+
+            yield buildLiveFinding(
+              payload,
+              analysis,
+              liveAttack.targetUrl,
+              payload.userMessage,
+              200, // WS has no HTTP status; use 200 as placeholder
+              result.durationMs,
+            );
+          } else {
+            failed++;
+          }
+        } else {
+          failed++;
+        }
+      } finally {
+        if (this.rateLimiter) {
+          this.rateLimiter.release(RATE_LIMITER_SERVICE);
+        }
+      }
+
+      // Enforce minimum delay between payloads
+      if (i < payloadsToRun.length - 1) {
+        await sleep(INTER_PAYLOAD_DELAY_MS);
+      }
+    }
+
+    context.logger.info('spear-23: WebSocket live attack complete', {
+      total: payloadsToRun.length,
+      succeeded,
+      failed,
+      errors,
+      successRate: payloadsToRun.length > 0
+        ? `${Math.round((succeeded / payloadsToRun.length) * 100)}%`
+        : '0%',
+    });
+  }
 }
 
 // ─── Default Export ─────────────────────────────────────────
@@ -572,5 +718,7 @@ export { PAYLOADS, PAYLOAD_COUNT, getPayloadsByCategory, getPayloadById, getCate
 export type { InjectionPayload, PayloadCategory, SuccessIndicator } from './payloads.js';
 export { LLMHttpClient } from './http-client.js';
 export type { LLMRequest, LLMResponse, LLMRequestBody, HttpClientConfig } from './http-client.js';
+export { WsAttackClient, isWebSocketUrl, detectWsPreset } from './ws-client.js';
+export type { WsClientConfig, WsPayloadResult, WsPreset } from './ws-client.js';
 export { analyzeResponse, analyzeErrorResponse } from './response-analyzer.js';
 export type { AnalysisResult } from './response-analyzer.js';
