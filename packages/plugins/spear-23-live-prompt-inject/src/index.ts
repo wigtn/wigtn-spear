@@ -51,6 +51,8 @@ import { RateLimiter } from '@wigtn/core';
 import { PAYLOADS, PAYLOAD_COUNT, type InjectionPayload } from './payloads.js';
 import { LLMHttpClient } from './http-client.js';
 import { WsAttackClient, isWebSocketUrl, detectWsPreset } from './ws-client.js';
+import { executeRelayChain } from './relay-chain.js';
+import type { RelayChainConfig, RelayAttackResult } from './relay-chain.js';
 import { analyzeResponse, analyzeErrorResponse, type AnalysisResult } from './response-analyzer.js';
 
 // ─── Constants ──────────────────────────────────────────────
@@ -375,8 +377,13 @@ class LivePromptInjectPlugin implements SpearPlugin {
 
     if (isLiveMode) {
       const targetUrl = context.liveAttack!.targetUrl;
+      const hasRelayPhone = !!context.liveAttack!.headers?.['X-Relay-Phone'];
+
       if (isWebSocketUrl(targetUrl)) {
         yield* this.runWsLiveAttack(context);
+      } else if (hasRelayPhone || targetUrl.includes('/relay/')) {
+        // Relay chain mode: REST → WS attack
+        yield* this.runRelayChainAttack(context);
       } else {
         yield* this.runLiveAttack(context);
       }
@@ -706,6 +713,125 @@ class LivePromptInjectPlugin implements SpearPlugin {
         : '0%',
     });
   }
+
+  // ─── Relay Chain Attack (REST → WS) ───────────────────────
+
+  /**
+   * Execute a full relay chain attack:
+   *   1. POST /relay/calls/start → get WS URL
+   *   2. Connect to WS, send injection payloads
+   *   3. Collect responses
+   *   4. POST /relay/calls/{id}/end → cleanup
+   *
+   * This method is called when the target URL points to a relay server
+   * with the relay chain config provided in liveAttack options.
+   *
+   * Usage from CLI:
+   *   spear attack <relay-url> --module live-prompt-inject \
+   *     --header "X-Relay-Phone:+1234567890" \
+   *     --header "X-Relay-Mode:text_to_voice"
+   */
+  async *runRelayChainAttack(
+    context: PluginContext,
+  ): AsyncGenerator<Finding> {
+    const liveAttack = context.liveAttack!;
+    const maxPayloads = Math.min(liveAttack.maxRequests ?? 5, 10);
+
+    // Extract relay config from custom headers
+    const phoneNumber = liveAttack.headers?.['X-Relay-Phone'] ?? '';
+    const communicationMode =
+      (liveAttack.headers?.['X-Relay-Mode'] as RelayChainConfig['communicationMode']) ??
+      'text_to_voice';
+    const systemPromptOverride = liveAttack.headers?.['X-Relay-Prompt-Override'];
+
+    if (!phoneNumber) {
+      context.logger.error(
+        'spear-23: relay chain requires phone number. ' +
+        'Pass --header "X-Relay-Phone:+1234567890"',
+      );
+      return;
+    }
+
+    context.logger.info('spear-23: starting relay chain attack', {
+      relayUrl: liveAttack.targetUrl,
+      phoneNumber: phoneNumber.slice(0, 4) + '****',
+      communicationMode,
+      hasPromptOverride: !!systemPromptOverride,
+      maxPayloads,
+    });
+
+    // Select payloads
+    const payloadsToSend = PAYLOADS.slice(0, maxPayloads);
+    const payloadTexts = payloadsToSend.map((p) => p.userMessage);
+
+    const chainResult = await executeRelayChain(
+      {
+        relayBaseUrl: liveAttack.targetUrl,
+        phoneNumber,
+        communicationMode,
+        systemPromptOverride,
+        timeout: liveAttack.timeout ?? 15_000,
+        responseWaitMs: 5_000,
+        maxPayloads,
+        logger: context.logger,
+      },
+      payloadTexts,
+    );
+
+    // Finding: system_prompt_override accepted
+    if (chainResult.promptOverrideAccepted) {
+      yield {
+        ruleId: 'spear-23/relay-prompt-override',
+        severity: 'critical',
+        message:
+          'Relay API accepted system_prompt_override parameter — ' +
+          'direct prompt injection via REST API without authentication',
+        cvss: 9.8,
+        mitreTechniques: ['AML.T0051'],
+        remediation:
+          'Remove system_prompt_override from public API. ' +
+          'System prompts should be server-side only and not user-controllable.',
+        metadata: {
+          pluginId: 'live-prompt-inject',
+          category: 'relay_prompt_override',
+          relayUrl: liveAttack.targetUrl,
+          callId: chainResult.session.callId,
+          analysisType: 'live',
+        },
+      };
+    }
+
+    // Analyze each payload response
+    let succeeded = 0;
+    for (let i = 0; i < chainResult.payloadResults.length; i++) {
+      const wsResult = chainResult.payloadResults[i]!;
+      const payload = payloadsToSend[i]!;
+
+      if (!wsResult.responseText) continue;
+
+      const analysis = analyzeResponse(payload, wsResult.responseText);
+
+      if (analysis.injectionSucceeded) {
+        succeeded++;
+        yield buildLiveFinding(
+          payload,
+          analysis,
+          chainResult.session.wsUrl || liveAttack.targetUrl,
+          wsResult.sent,
+          200,
+          wsResult.durationMs,
+        );
+      }
+    }
+
+    context.logger.info('spear-23: relay chain attack complete', {
+      callId: chainResult.session.callId,
+      payloadsSent: chainResult.payloadResults.length,
+      injectionSucceeded: succeeded,
+      sessionCleaned: chainResult.cleaned,
+      totalDurationMs: chainResult.totalDurationMs,
+    });
+  }
 }
 
 // ─── Default Export ─────────────────────────────────────────
@@ -722,3 +848,5 @@ export { WsAttackClient, isWebSocketUrl, detectWsPreset } from './ws-client.js';
 export type { WsClientConfig, WsPayloadResult, WsPreset } from './ws-client.js';
 export { analyzeResponse, analyzeErrorResponse } from './response-analyzer.js';
 export type { AnalysisResult } from './response-analyzer.js';
+export { executeRelayChain } from './relay-chain.js';
+export type { RelayChainConfig, RelayAttackResult, RelaySessionInfo } from './relay-chain.js';

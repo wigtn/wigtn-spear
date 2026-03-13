@@ -47,6 +47,10 @@ import { discoverEndpoints } from './endpoint-discovery.js';
 import type { DiscoveredEndpoint } from './endpoint-discovery.js';
 import { ProbeEngine } from './probe-engine.js';
 import type { ProbeResult, EndpointInfo, AuthBypassResult } from './probe-engine.js';
+import { discoverCloudServices, parseCloudRunUrl } from './cloud-service-discovery.js';
+import type { CloudServiceResult } from './cloud-service-discovery.js';
+import { scanOpenApi } from './openapi-scanner.js';
+import type { OpenApiScanResult, DangerousParam } from './openapi-scanner.js';
 
 // ─── Plugin Implementation ────────────────────────────────────
 
@@ -144,6 +148,151 @@ export class EndpointProberPlugin implements SpearPlugin {
       targetUrl: context.liveAttack.targetUrl,
     });
 
+    // Track endpoints to avoid duplicates between source/config/openapi
+    const endpointsToProbeKeys = new Set<string>();
+    const additionalEndpoints: EndpointInfo[] = [];
+
+    // ── Phase 3a: Cloud Service Discovery ─────────────────────
+
+    const parsedCloudUrl = parseCloudRunUrl(context.liveAttack.targetUrl);
+    if (parsedCloudUrl) {
+      context.logger.info('Cloud Run URL detected, starting service enumeration', {
+        service: parsedCloudUrl.serviceName,
+        hash: parsedCloudUrl.projectHash,
+        region: parsedCloudUrl.region,
+      });
+
+      const cloudServices = await discoverCloudServices({
+        knownUrl: context.liveAttack.targetUrl,
+        maxProbes: 80,
+        timeout: context.liveAttack.timeout ?? 5000,
+        logger: context.logger,
+      });
+
+      for (const svc of cloudServices) {
+        yield {
+          ruleId: 'spear-25/cloud-service-discovered',
+          severity: 'high',
+          message:
+            `Cloud Run sibling service discovered: ${svc.serviceName} at ${svc.url} ` +
+            `(status ${svc.status}, ${svc.latencyMs}ms)`,
+          cvss: 7.5,
+          mitreTechniques: ['T1595'],
+          remediation:
+            'Review service naming conventions. Consider using non-guessable service names ' +
+            'or restricting access via IAM/ingress policies.',
+          metadata: {
+            pluginId: 'endpoint-prober',
+            category: 'cloud_service_discovery',
+            service: svc.serviceName,
+            url: svc.url,
+            status: svc.status,
+            serverHeader: svc.serverHeader,
+            latencyMs: svc.latencyMs,
+            analysisType: 'live',
+          },
+        };
+      }
+    }
+
+    // ── Phase 3b: OpenAPI/Swagger Scanner ──────────────────────
+
+    context.logger.info('Scanning for exposed API documentation');
+
+    const openApiResult = await scanOpenApi({
+      baseUrl: context.liveAttack.targetUrl,
+      timeout: context.liveAttack.timeout ?? 8000,
+      logger: context.logger,
+    });
+
+    if (openApiResult.found) {
+      // Finding: API docs exposed
+      for (const docUrl of openApiResult.exposedUrls) {
+        yield {
+          ruleId: 'spear-25/openapi-exposed',
+          severity: 'high',
+          message:
+            `API documentation publicly exposed: ${docUrl.url} ` +
+            `(status ${docUrl.status}, ${docUrl.isSpec ? 'parseable spec' : 'docs UI'})`,
+          cvss: 7.5,
+          mitreTechniques: ['T1592'],
+          remediation:
+            'Restrict API documentation endpoints to internal networks or authenticated users. ' +
+            'Disable Swagger UI and OpenAPI spec endpoints in production.',
+          metadata: {
+            pluginId: 'endpoint-prober',
+            category: 'openapi_exposed',
+            url: docUrl.url,
+            status: docUrl.status,
+            contentType: docUrl.contentType,
+            isSpec: docUrl.isSpec,
+            analysisType: 'live',
+          },
+        };
+      }
+
+      // Finding: Unauthenticated endpoints found in spec
+      for (const ep of openApiResult.unauthenticatedEndpoints) {
+        yield {
+          ruleId: 'spear-25/openapi-no-auth',
+          severity: 'high',
+          message:
+            `OpenAPI spec defines unauthenticated endpoint: ` +
+            `${ep.method} ${ep.path}${ep.summary ? ` (${ep.summary})` : ''}`,
+          cvss: 8.1,
+          mitreTechniques: ['T1190'],
+          remediation:
+            'Add security definitions to all API endpoints in the OpenAPI spec. ' +
+            'Verify that authentication is enforced at runtime.',
+          metadata: {
+            pluginId: 'endpoint-prober',
+            category: 'openapi_no_auth',
+            endpoint: { method: ep.method, path: ep.path },
+            operationId: ep.operationId,
+            analysisType: 'live',
+          },
+        };
+      }
+
+      // Finding: Dangerous parameters
+      for (const param of openApiResult.dangerousParams) {
+        const severity: Severity = param.reason.includes('prompt') ? 'critical' : 'high';
+        yield {
+          ruleId: 'spear-25/dangerous-param',
+          severity,
+          message:
+            `Dangerous parameter in API spec: ${param.paramName} ` +
+            `in ${param.method} ${param.endpoint} (${param.location}) — ${param.reason}`,
+          cvss: severity === 'critical' ? 9.1 : 7.5,
+          mitreTechniques: ['T1190'],
+          remediation:
+            `Review the "${param.paramName}" parameter for security implications. ` +
+            'Consider removing it from the public API or adding strict validation.',
+          metadata: {
+            pluginId: 'endpoint-prober',
+            category: 'dangerous_param',
+            endpoint: { method: param.method, path: param.endpoint },
+            paramName: param.paramName,
+            location: param.location,
+            reason: param.reason,
+            analysisType: 'live',
+          },
+        };
+      }
+
+      // Add unauthenticated endpoints from OpenAPI to the probe list
+      for (const ep of openApiResult.unauthenticatedEndpoints) {
+        const key = `${ep.method}:${ep.path}`;
+        if (!endpointsToProbeKeys.has(key)) {
+          endpointsToProbeKeys.add(key);
+          additionalEndpoints.push({
+            method: ep.method,
+            path: ep.path,
+          });
+        }
+      }
+    }
+
     const probeEngine = new ProbeEngine(context.liveAttack, context.logger);
 
     // Build the list of endpoints to probe
@@ -151,6 +300,11 @@ export class EndpointProberPlugin implements SpearPlugin {
       discoveredEndpoints,
       context.liveAttack.endpoints,
     );
+
+    // Track keys of already-known endpoints
+    for (const ep of endpointsToProbe) {
+      endpointsToProbeKeys.add(`${ep.method}:${ep.path}`);
+    }
 
     context.logger.info('Endpoints to probe', {
       total: endpointsToProbe.length,
@@ -161,7 +315,10 @@ export class EndpointProberPlugin implements SpearPlugin {
     let probedCount = 0;
     let liveFindingsCount = 0;
 
-    for (const endpoint of endpointsToProbe) {
+    // Merge additional endpoints discovered from OpenAPI
+    const allEndpoints = [...endpointsToProbe, ...additionalEndpoints];
+
+    for (const endpoint of allEndpoints) {
       const result = await probeEngine.probeEndpoint(endpoint);
       if (result === null) continue;
 
