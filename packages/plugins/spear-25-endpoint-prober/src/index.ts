@@ -68,7 +68,7 @@ export class EndpointProberPlugin implements SpearPlugin {
     severity: 'critical',
     tags: ['auth', 'endpoint', 'live-attack', 'api-security'],
     references: ['OWASP-API2', 'CWE-306'],
-    safeMode: true,
+    safeMode: false,
     requiresNetwork: true,
     supportedPlatforms: ['darwin', 'linux', 'win32'],
     permissions: ['fs:read', 'net:outbound'],
