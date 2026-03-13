@@ -1,11 +1,13 @@
 # WIGTN-SPEAR PRD
 
-> **Version**: 1.0
+> **Version**: 2.0
 > **Created**: 2026-03-13
+> **Updated**: 2026-03-13 (v2: Distillation Attack Module 추가)
 > **Status**: Draft
 > **Scale Grade**: Startup
 > **Team**: WIGTN Hackathon Team 2
-> **Research Base**: 30 Academic Papers, 20+ CVEs
+> **Research Base**: 38 Academic Papers, 20+ CVEs
+> **Changelog**: v1→v2: Spear-21 Model Distillation Tester 추가, FR-013/014/017 강화, 논문 +8편
 
 ---
 
@@ -29,7 +31,8 @@
 - **G2**: AI 에이전트/MCP 프로토콜 대상 공격 테스트를 세계 최초로 제품화
 - **G3**: WIGTN-SHIELD(방어 도구)와 연동하여 Red Team/Blue Team 사이클 완성
 - **G4**: SARIF 2.1.0 출력으로 GitHub/GitLab CI/CD에 즉시 통합 가능
-- **G5**: 30편 논문 + 20+ CVE 기반의 학술적 근거를 갖춘 공격 모듈 제공
+- **G5**: 38편 논문 + 20+ CVE 기반의 학술적 근거를 갖춘 공격 모듈 제공
+- **G6**: 2026년 2월 산업 규모 증류 공격 사건 대응 - 모델 증류 취약성 테스트 세계 최초 제품화
 
 ### 1.3 Non-Goals (Out of Scope)
 
@@ -127,6 +130,34 @@ Scenario: SHIELD Integration
   And a Gap Analysis report shows detected vs. missed attacks
   And a Security Score (A-F) is calculated
 
+Scenario: Model Distillation - System Prompt Extraction
+  Given a target AI model/service endpoint
+  When I run `spear test --module distillation-tester --scenario prompt-extraction`
+  Then 50+ prompt extraction payloads are tested (direct, Base64, translation, roleplay, sandwich)
+  And system prompt leak percentage is calculated
+  And results are mapped to OWASP LLM07
+
+Scenario: Model Distillation - CoT Extraction
+  Given a target AI model with reasoning capabilities
+  When I run `spear test --module distillation-tester --scenario cot-extraction`
+  Then structured reasoning prompts are sent to elicit step-by-step responses
+  And CoT exposure depth is measured (surface | partial | full)
+  And reasoning trace reproducibility is tested across multiple queries
+
+Scenario: Model Distillation - Rate Limit Sufficiency
+  Given a target AI service API with rate limiting
+  When I run `spear test --module distillation-tester --scenario rate-limit-audit`
+  Then progressive query volume tests are performed
+  And distributed attack simulation (multi-account) is modeled
+  And a report shows whether current limits can prevent 16M-query-scale extraction
+
+Scenario: Model Distillation - SHIELD Detection
+  Given WIGTN-SHIELD is monitoring API traffic
+  When I run `spear attack --target shield --scenario distillation-simulation`
+  Then 6 distillation signature patterns are generated and tested
+  And SHIELD's detection capability is verified per signature
+  And Gap Analysis shows detected vs. missed patterns
+
 Scenario: Scan Interruption Recovery
   Given a scan is in progress on a large repository (> 10,000 files)
   When the scan is interrupted (Ctrl+C, process kill, system crash)
@@ -191,11 +222,11 @@ Scenario: Worker Thread Crash
 | FR-010 | **Spear-01: Secret Scanner** - 프로젝트 전체 시크릿 패턴 스캔 + 라이브 검증 | P0 | FR-001~007 |
 | FR-011 | **Spear-02: Git History Miner** - git reflog, fsck, dangling commit 분석 | P0 | FR-001~003 |
 | FR-012 | **Spear-04: MCP Poisoning Tester** - Mock MCP 서버, tool description 인젝션, Rug Pull | P0 | - |
-| FR-013 | **Spear-06: Prompt Injection Fuzzer** - 314+ 페이로드, 7단계 킬체인, MITRE 매핑 | P0 | - |
-| FR-014 | **Spear-10: AI Agent Manipulation** - 설정 파일 인젝션 (.cursorrules, .claude/settings.json) | P0 | - |
+| FR-013 | **Spear-06: Prompt Injection Fuzzer** - 364+ 페이로드 (기존 314 + 증류 50), 7단계 킬체인, MITRE 매핑 | P0 | - |
+| FR-014 | **Spear-10: AI Agent Manipulation** - 설정 파일 인젝션 + CoT 추출/리다이렉트 시나리오 3종 | P0 | - |
 | FR-015 | **Spear-11: CI/CD Pipeline Exploit** - GitHub Actions YAML 분석, SHA 핀닝 감사 | P0 | - |
 | FR-016 | **Spear-13: Cloud Credential Chain** - AWS/GCP/Azure 크레덴셜 파일 + IMDS + IAM 체인 | P0 | FR-001~003 |
-| FR-017 | **Spear-17: LLM Output Exploitation** - Slopsquatting 탐지, AI 백도어 패턴 | P0 | FR-001~003 |
+| FR-017 | **Spear-17: LLM Output Exploitation** - Slopsquatting 탐지, AI 백도어 패턴, 증류 부산물 탐지 (안전 가드레일 제거, 워터마크 생존) | P0 | FR-001~003 |
 
 ### 3.3 Attack Modules - P1
 
@@ -209,6 +240,7 @@ Scenario: Worker Thread Crash
 | FR-025 | **Spear-15: IDE Extension Auditor** - VS Code/Cursor 확장 권한 + 악성 패턴 | P1 | FR-001 |
 | FR-026 | **Spear-16: Webhook & API Scanner** - 웹훅 URL 발견, KeyHacks 170+ 서비스 | P1 | FR-004 |
 | FR-027 | **Spear-19: Social Engineering Code** - 트로이 PR, 락파일 조작, 기여자 신뢰 점수 | P1 | - |
+| FR-035 | **Spear-21: Model Distillation Tester** - 시스템 프롬프트 추출, CoT 추출, Rate Limit 검증, 능력 경계 탐색, 증류 방어 평가 | P1 | FR-013, FR-007 |
 
 ### 3.4 Attack Modules - P2
 
@@ -1107,7 +1139,7 @@ interface GrantedPermissions {
 
 | Level | 설명 | 권한 범위 | 설치 방법 |
 |-------|------|----------|----------|
-| `builtin` | WIGTN 팀 개발 공식 모듈 (Spear-01~20) | 모든 권한 | 번들 포함 |
+| `builtin` | WIGTN 팀 개발 공식 모듈 (Spear-01~21) | 모든 권한 | 번들 포함 |
 | `verified` | 서명 검증 통과한 서드파티 플러그인 | metadata.permissions에 선언된 권한만 | `spear plugin install` + 서명 확인 |
 | `community` | 미검증 커뮤니티 플러그인 | fs:read, git:read, db:write만 | `spear plugin install --allow-unverified` |
 | `untrusted` | 서명 없음 또는 변조 감지 | 실행 불가 (차단) | - |
@@ -1310,16 +1342,20 @@ allowlist:
 
 **Deliverable**: 인프라 모듈 동작, 웹 대시보드 접근 가능
 
-### Phase 4: P1 Modules + SHIELD Integration (2주)
+### Phase 4: P1 Modules + SHIELD Integration (3주)
 
-- [ ] P1 모듈 8개 구현
+- [ ] P1 모듈 8개 구현 (Spear-03, 05, 08, 12, 14, 15, 16, 19)
+- [ ] **Spear-21: Model Distillation Tester** 모듈 구현
+- [ ] 증류 페이로드 YAML 작성 (CoT 추출 30+, 프롬프트 탈취 50+, 능력 탐색 200+)
+- [ ] 기존 모듈 강화 (Spear-06 +50 증류 페이로드, Spear-10 +3 CoT 시나리오, Spear-17 +3 증류 부산물)
+- [ ] SHIELD 증류 탐지 시그니처 6종 정의 및 연동 테스트
 - [ ] SHIELD 연동 테스트 프레임워크
 - [ ] Gap Analysis 리포트
 - [ ] 플러그인 마켓플레이스 기반
 - [ ] `spear update-rules` 자동 업데이트
 - [ ] E2E 테스트
 
-**Deliverable**: 전체 20개 모듈 중 16개 동작, SHIELD 연동 가능
+**Deliverable**: 전체 21개 모듈 중 17개 동작, SHIELD 연동 가능 (증류 탐지 포함)
 
 ### Phase 5: P2 Modules + Production Polish (추후)
 
@@ -1347,6 +1383,11 @@ allowlist:
 | CLI 시작 시간 | < 200ms | oclif cold start |
 | npm 패키지 다운로드 | 1,000+/월 (6개월 내) | npm stats |
 | SHIELD 연동 테스트 시나리오 | 15+ | Red/Blue Team 시나리오 |
+| 시스템 프롬프트 추출 탐지율 | > 90% | 50+ 페이로드 중 추출 성공 건 식별 |
+| CoT 추출 깊이 평가 정확도 | > 85% | surface/partial/full 분류 정확도 |
+| Rate Limit 충분성 계산 정확도 | 95% | 1,600만건 시뮬레이션 vs 실제 한도 |
+| SHIELD 증류 시그니처 탐지율 | > 80% | 6개 시그니처 중 탐지 성공 건 |
+| 증류 페이로드 DB 최신성 | 분기별 업데이트 | 최신 논문/CVE 반영 여부 |
 
 ---
 
@@ -1363,6 +1404,9 @@ allowlist:
 | 악성 서드파티 플러그인 | Medium | High | Ed25519 서명 검증 + Trust Level 계층 + 권한 샌드박싱 + Worker 격리 |
 | 시크릿 메모리 잔류 | Low | High | SecureSecret.dispose() + Buffer.fill(0) + 검증 후 즉시 해제 + CI 정적 분석 |
 | Dashboard 네트워크 노출 | Low | High | Localhost 기본 + Network Mode 시 bcrypt 인증 필수 + JWT + 실패 잠금 |
+| 자사 AI 모델 증류 공격 | High | Critical | Spear-21로 사전 취약성 테스트 + Rate Limit 검증 + SHIELD 탐지 시그니처 배포 |
+| 증류 테스트의 대상 서비스 ToS 위반 | Medium | High | 자사 모델만 테스트(FR-081 권한 확인) + dry-run 모드 + 감사 로그 |
+| 증류 방어 우회 기법 진화 | High | Medium | 최신 논문(DistillGuard 등) 추적 + 페이로드 분기별 업데이트 |
 
 ---
 
@@ -1410,6 +1454,21 @@ allowlist:
 28. "AI Agent Data Exfiltration via Web Search" - arXiv:2510.09093
 29. "HERCULE: Python Supply Chain Malware" (ICSE 2025)
 30. Anthropic "First AI-Orchestrated Cyber Espionage" (2025)
+
+### 모델 증류/추출 공격 (8편)
+31. "DistillGuard: Evaluating Defenses Against LLM Knowledge Distillation" (2026.03) - arXiv:2603.07835
+32. "DOGe: Defensive Output Generation for LLM Protection Against KD" (2025.05) - arXiv:2505.19504
+33. "Protecting LMs Against Unauthorized Distillation through Trace Rewriting" (2026.02) - arXiv:2602.15143
+34. "Towards Distillation-Resistant LLMs: An Information-Theoretic Perspective" (2026.02) - arXiv:2602.03396
+35. Carlini et al. "Stealing Part of a Production Language Model" (ICML 2024 Best Paper) - arXiv:2403.06634
+36. "Model Leeching: An Extraction Attack Targeting LLMs" (CAMLIS 2023) - arXiv:2309.10544
+37. "Weak-To-Strong Backdoor Attacks for LLMs with Contrastive KD" (2024.09) - arXiv:2409.17946
+38. "DistilLock: Safeguarding LLMs from Unauthorized Knowledge Distillation" (2025.10) - arXiv:2510.16716
+
+### 산업 보고서 (증류 사건)
+- Anthropic "Detecting and Preventing Distillation Attacks" (2026.02.23) - 24K 계정, 1,600만 교환
+- Google GTIG "AI Threat Tracker" (2026.02) - Gemini 대상 10만+ 추출 시도
+- OpenAI 미국 하원 중국특위 서한 (2026.02.12) - DeepSeek 난독화 라우터 증거
 
 ---
 

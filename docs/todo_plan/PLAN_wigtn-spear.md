@@ -88,7 +88,7 @@
 
 **Deliverable**: 인프라 모듈 + 웹 대시보드 동작
 
-### Phase 4: P1 Modules + SHIELD Integration (2주)
+### Phase 4: P1 Modules + SHIELD Integration (3주)
 
 - [ ] **Spear-03: Env Exfiltration Simulator**
 - [ ] **Spear-05: Dependency Confusion Checker**
@@ -98,6 +98,10 @@
 - [ ] **Spear-15: IDE Extension Auditor**
 - [ ] **Spear-16: Webhook & API Endpoint Scanner**
 - [ ] **Spear-19: Social Engineering Code Analyzer**
+- [ ] **Spear-21: Model Distillation Tester** 모듈 구현
+- [ ] 증류 페이로드 YAML (CoT 추출 30+, 프롬프트 탈취 50+, 능력 탐색 200+)
+- [ ] 기존 모듈 강화 (Spear-06 +50 증류 페이로드, Spear-10 +3 CoT, Spear-17 +3 증류 부산물)
+- [ ] SHIELD 증류 탐지 시그니처 6종 정의 및 연동 테스트
 - [ ] SHIELD 연동 테스트 프레임워크
 - [ ] spear shield-test CLI 명령어
 - [ ] Gap Analysis 리포트
@@ -105,7 +109,7 @@
 - [ ] spear update-rules 자동 업데이트
 - [ ] E2E 테스트
 
-**Deliverable**: 16/20 모듈 동작 + SHIELD 연동
+**Deliverable**: 17/21 모듈 동작 + SHIELD 연동 (증류 탐지 포함)
 
 ### Phase 5: P2 Modules + Production Polish (추후)
 
@@ -125,7 +129,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Tasks | 0/75 |
+| Total Tasks | 0/83 |
 | Current Phase | - |
 | Status | pending |
 
