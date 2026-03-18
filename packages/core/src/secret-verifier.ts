@@ -71,6 +71,9 @@ const SERVICE_PATTERNS: Array<{ pattern: RegExp; service: string }> = [
   { pattern: /^xoxp-[0-9]+-[0-9]+-/, service: 'slack' },
   { pattern: /^ya29\.[a-zA-Z0-9_-]+$/, service: 'gcp' },
   { pattern: /^AIza[a-zA-Z0-9_-]{35}$/, service: 'google-api-key' },
+  // Korean services
+  { pattern: /^(?:test_sk|live_sk)_[a-zA-Z0-9]{20,}$/, service: 'toss' },
+  { pattern: /^https:\/\/[a-f0-9]{32}@[a-z0-9]+\.ingest\.sentry\.io\/[0-9]+$/, service: 'sentry' },
 ];
 
 // ─── Helper Functions ────────────────────────────────────────
@@ -638,6 +641,291 @@ async function verifyFirebase(secret: string): Promise<Partial<VerificationResul
   };
 }
 
+// ─── Korean Service Verifiers ────────────────────────────────
+
+/**
+ * Verify a Kakao REST API key.
+ *
+ * Calls GET https://dapi.kakao.com/v2/local/search/address?query=서울
+ * with Authorization: KakaoAK {key}. 200 = active, 401 = invalid.
+ */
+async function verifyKakaoRest(secret: string): Promise<Partial<VerificationResult>> {
+  const response = await fetchWithTimeout(
+    'https://dapi.kakao.com/v2/local/search/address?query=%EC%84%9C%EC%9A%B8',
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `KakaoAK ${secret}`,
+        'User-Agent': USER_AGENT,
+      },
+    },
+  );
+
+  if (response.status === 200) {
+    return {
+      verified: true,
+      active: true,
+      permissions: ['kakao-local-api'],
+      metadata: { service: 'kakao-rest' },
+    };
+  }
+
+  if (response.status === 401) {
+    return {
+      verified: true,
+      active: false,
+      error: 'Kakao REST key is invalid or deactivated',
+      metadata: { service: 'kakao-rest' },
+    };
+  }
+
+  // 403 can mean domain restriction is in place (key exists but restricted)
+  if (response.status === 403) {
+    return {
+      verified: true,
+      active: true,
+      permissions: ['kakao-local-api (domain-restricted)'],
+      metadata: { service: 'kakao-rest', domainRestricted: true },
+    };
+  }
+
+  const text = await response.text();
+  return {
+    verified: false,
+    active: false,
+    error: `Kakao API returned ${response.status}: ${text.slice(0, 200)}`,
+    metadata: { service: 'kakao-rest' },
+  };
+}
+
+/**
+ * Verify a Kakao JavaScript key.
+ *
+ * Calls GET https://kapi.kakao.com/v2/user/me with Authorization: KakaoAK {key}.
+ * 401 vs 403 differentiates between invalid key and valid-but-unauthorized.
+ */
+async function verifyKakaoJs(secret: string): Promise<Partial<VerificationResult>> {
+  const response = await fetchWithTimeout(
+    'https://kapi.kakao.com/v2/user/me',
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `KakaoAK ${secret}`,
+        'User-Agent': USER_AGENT,
+      },
+    },
+  );
+
+  // 401 = key is completely invalid
+  if (response.status === 401) {
+    return {
+      verified: true,
+      active: false,
+      error: 'Kakao key is invalid',
+      metadata: { service: 'kakao-js' },
+    };
+  }
+
+  // 403 = key exists but lacks permission for this API (key is active)
+  if (response.status === 403) {
+    return {
+      verified: true,
+      active: true,
+      permissions: ['kakao-app-key (limited scope)'],
+      metadata: { service: 'kakao-js' },
+    };
+  }
+
+  // 200 = fully functional (unlikely for user/me without token, but possible)
+  if (response.status === 200) {
+    return {
+      verified: true,
+      active: true,
+      permissions: ['kakao-user-api'],
+      metadata: { service: 'kakao-js' },
+    };
+  }
+
+  return {
+    verified: false,
+    active: false,
+    error: `Kakao API returned ${response.status}`,
+    metadata: { service: 'kakao-js' },
+  };
+}
+
+/**
+ * Verify Kakao keys: try REST API first, fall back to JS key check.
+ */
+async function verifyKakao(secret: string): Promise<Partial<VerificationResult>> {
+  // Try REST API verification first
+  const restResult = await verifyKakaoRest(secret);
+  if (restResult.active) return restResult;
+
+  // Fall back to JS key verification
+  const jsResult = await verifyKakaoJs(secret);
+  return jsResult;
+}
+
+/**
+ * Verify Naver API credentials.
+ *
+ * Format: "clientId:clientSecret"
+ * Calls GET https://openapi.naver.com/v1/search/blog?query=test
+ * with X-Naver-Client-Id and X-Naver-Client-Secret headers.
+ */
+async function verifyNaver(secret: string): Promise<Partial<VerificationResult>> {
+  const colonIdx = secret.indexOf(':');
+  if (colonIdx === -1) {
+    return {
+      verified: false,
+      active: false,
+      error: 'Naver verification requires clientId:clientSecret format',
+    };
+  }
+
+  const clientId = secret.slice(0, colonIdx);
+  const clientSecret = secret.slice(colonIdx + 1);
+
+  const response = await fetchWithTimeout(
+    'https://openapi.naver.com/v1/search/blog?query=test',
+    {
+      method: 'GET',
+      headers: {
+        'X-Naver-Client-Id': clientId,
+        'X-Naver-Client-Secret': clientSecret,
+        'User-Agent': USER_AGENT,
+      },
+    },
+  );
+
+  if (response.status === 200) {
+    return {
+      verified: true,
+      active: true,
+      permissions: ['naver-search-api'],
+      metadata: { service: 'naver' },
+    };
+  }
+
+  if (response.status === 401) {
+    return {
+      verified: true,
+      active: false,
+      error: 'Naver API credentials are invalid',
+      metadata: { service: 'naver' },
+    };
+  }
+
+  const text = await response.text();
+  return {
+    verified: false,
+    active: false,
+    error: `Naver API returned ${response.status}: ${text.slice(0, 200)}`,
+    metadata: { service: 'naver' },
+  };
+}
+
+/**
+ * Verify a Toss Payments secret key.
+ *
+ * Calls GET https://api.tosspayments.com/v1/payments with Basic Auth.
+ * The secret key is used as the username with empty password.
+ */
+async function verifyToss(secret: string): Promise<Partial<VerificationResult>> {
+  const basicAuth = Buffer.from(secret + ':').toString('base64');
+
+  const response = await fetchWithTimeout(
+    'https://api.tosspayments.com/v1/payments',
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${basicAuth}`,
+        'User-Agent': USER_AGENT,
+      },
+    },
+  );
+
+  // 200 or 400 (bad request but auth passed) = key is valid
+  if (response.status === 200 || response.status === 400) {
+    return {
+      verified: true,
+      active: true,
+      permissions: ['toss-payments-api'],
+      metadata: {
+        service: 'toss',
+        isTestKey: secret.startsWith('test_sk'),
+      },
+    };
+  }
+
+  if (response.status === 401) {
+    return {
+      verified: true,
+      active: false,
+      error: 'Toss Payments key is invalid',
+      metadata: { service: 'toss' },
+    };
+  }
+
+  const text = await response.text();
+  return {
+    verified: false,
+    active: false,
+    error: `Toss API returned ${response.status}: ${text.slice(0, 200)}`,
+    metadata: { service: 'toss' },
+  };
+}
+
+/**
+ * Verify a Sentry DSN by making a GET request to the DSN URL.
+ *
+ * Sentry DSNs have the format: https://{key}@{org}.ingest.sentry.io/{project}
+ * A GET request to the store endpoint returns 200 if the project exists.
+ */
+async function verifySentry(secret: string): Promise<Partial<VerificationResult>> {
+  // Parse the DSN to extract components
+  const dsnMatch = /^https:\/\/([a-f0-9]{32})@([a-z0-9]+\.ingest\.sentry\.io)\/(\d+)$/.exec(secret);
+  if (!dsnMatch) {
+    return {
+      verified: false,
+      active: false,
+      error: 'Invalid Sentry DSN format',
+    };
+  }
+
+  const [, publicKey, host, projectId] = dsnMatch;
+  const storeUrl = `https://${host}/api/${projectId}/store/?sentry_key=${publicKey}&sentry_version=7`;
+
+  const response = await fetchWithTimeout(storeUrl, {
+    method: 'GET',
+    headers: { 'User-Agent': USER_AGENT },
+  });
+
+  // Sentry returns various status codes, but we can determine validity:
+  // 200/405/400 = DSN is valid (project exists, different methods expected)
+  // 401/403 = DSN is invalid or project disabled
+  if (response.status === 200 || response.status === 405 || response.status === 400) {
+    return {
+      verified: true,
+      active: true,
+      permissions: ['sentry-error-reporting'],
+      metadata: {
+        service: 'sentry',
+        projectId,
+        host,
+      },
+    };
+  }
+
+  return {
+    verified: true,
+    active: false,
+    error: `Sentry DSN appears invalid (status ${response.status})`,
+    metadata: { service: 'sentry' },
+  };
+}
+
 // ─── SecretVerifier Class ────────────────────────────────────
 
 export class SecretVerifier {
@@ -671,6 +959,9 @@ export class SecretVerifier {
       : service === 'gcp-service-account'
         ? 'gcp'
         : service;
+
+    // For kakao, we need the type hint to distinguish REST vs JS key
+    // The verifier will set the correct service in metadata
 
     // Check cache first
     const cached = this.cache.get(masked);
@@ -845,6 +1136,14 @@ export class SecretVerifier {
         return verifyGcpOAuth(secret);
       case 'gcp-service-account':
         return verifyGcpServiceAccount(secret);
+      case 'kakao':
+        return verifyKakao(secret);
+      case 'naver':
+        return verifyNaver(secret);
+      case 'toss':
+        return verifyToss(secret);
+      case 'sentry':
+        return verifySentry(secret);
       default:
         return {
           verified: false,

@@ -102,6 +102,20 @@ const CLIENT_INFO = {
   version: '0.1.0',
 };
 
+// ─── Header Validation ───────────────────────────────────────
+
+/** Validate HTTP headers: names must be alphanumeric+hyphen, values must not contain CRLF or null bytes. */
+function validateHeaders(headers: Record<string, string>): void {
+  for (const [name, value] of Object.entries(headers)) {
+    if (!/^[a-zA-Z0-9-]+$/.test(name)) {
+      throw new Error(`Invalid header name: '${name}'. Only alphanumeric characters and hyphens are allowed.`);
+    }
+    if (/[\r\n\0]/.test(value)) {
+      throw new Error(`Invalid header value for '${name}': contains CRLF or null byte.`);
+    }
+  }
+}
+
 // ─── SSE Transport ───────────────────────────────────────────
 
 /**
@@ -141,6 +155,7 @@ export class SSEMCPClient implements MCPClient {
     this.logger = logger;
     this.timeoutMs = options?.timeout ?? DEFAULT_TIMEOUT_MS;
     this.headers = options?.headers ?? {};
+    validateHeaders(this.headers);
   }
 
   async connect(): Promise<void> {
@@ -387,6 +402,11 @@ export class SSEMCPClient implements MCPClient {
       this.logger.debug('SSE received endpoint', {
         endpoint: this.messageEndpoint,
       });
+      // Notify waitForEndpoint()
+      if (this.endpointResolve) {
+        this.endpointResolve();
+        this.endpointResolve = null;
+      }
       return;
     }
 
@@ -407,31 +427,26 @@ export class SSEMCPClient implements MCPClient {
     }
   }
 
-  private waitForEndpoint(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const checkInterval = 50;
-      const maxWait = this.timeoutMs;
-      let elapsed = 0;
+  private endpointResolve: (() => void) | null = null;
 
-      const check = (): void => {
-        if (this.messageEndpoint) {
-          resolve();
-          return;
-        }
-        elapsed += checkInterval;
-        if (elapsed >= maxWait) {
-          // Fall back to default /message endpoint
+  private waitForEndpoint(): Promise<void> {
+    // If endpoint already set (e.g., from a fast SSE event), resolve immediately
+    if (this.messageEndpoint) return Promise.resolve();
+
+    return new Promise<void>((resolve) => {
+      this.endpointResolve = resolve;
+
+      // Timeout: fall back to default /message endpoint
+      setTimeout(() => {
+        if (!this.messageEndpoint) {
           this.messageEndpoint = `${this.baseUrl}/message`;
           this.logger.warn('SSE endpoint event not received, using default', {
             endpoint: this.messageEndpoint,
           });
-          resolve();
-          return;
         }
-        setTimeout(check, checkInterval);
-      };
-
-      check();
+        this.endpointResolve = null;
+        resolve();
+      }, this.timeoutMs);
     });
   }
 }
@@ -491,6 +506,7 @@ export class StdioMCPClient implements MCPClient {
         this.process = spawn(this.command, this.args, {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: { ...process.env, ...this.env },
+          shell: false,
         });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -763,6 +779,15 @@ export type MCPTransportType = 'sse' | 'stdio';
  *   - npx ... → Stdio transport (npx command)
  *   - /path/to/binary args... → Stdio transport (absolute path)
  */
+/** Allowed commands for stdio transport. */
+const ALLOWED_STDIO_COMMANDS = new Set([
+  'node', 'npx', 'python', 'python3', 'uvx', 'uv',
+  'docker', 'deno', 'bun',
+]);
+
+/** Shell metacharacters that must not appear in command arguments. */
+const SHELL_METACHAR_PATTERN = /[;&|`$(){}[\]<>!\\]/;
+
 export function parseTarget(targetUrl: string): {
   transport: MCPTransportType;
   url?: string;
@@ -776,23 +801,39 @@ export function parseTarget(targetUrl: string): {
   if (targetUrl.startsWith('stdio://')) {
     const url = new URL(targetUrl);
     const command = url.hostname + url.pathname;
+    const baseName = command.split('/').pop() ?? command;
+    if (!ALLOWED_STDIO_COMMANDS.has(baseName)) {
+      throw new Error(`Disallowed stdio command: '${baseName}'. Allowed: ${[...ALLOWED_STDIO_COMMANDS].join(', ')}`);
+    }
     const argsParam = url.searchParams.get('args');
     const args = argsParam ? argsParam.split(',') : [];
+    if (args.some(a => SHELL_METACHAR_PATTERN.test(a))) {
+      throw new Error('Shell metacharacters detected in stdio arguments');
+    }
     return { transport: 'stdio', command, args };
   }
 
   if (targetUrl.startsWith('npx ') || targetUrl.startsWith('npx\t')) {
     const parts = targetUrl.split(/\s+/);
+    if (parts.some((p, i) => i > 0 && SHELL_METACHAR_PATTERN.test(p))) {
+      throw new Error('Shell metacharacters detected in command arguments');
+    }
     return { transport: 'stdio', command: parts[0], args: parts.slice(1) };
   }
 
   if (targetUrl.startsWith('/')) {
     const parts = targetUrl.split(/\s+/);
+    if (parts.some((p, i) => i > 0 && SHELL_METACHAR_PATTERN.test(p))) {
+      throw new Error('Shell metacharacters detected in command arguments');
+    }
     return { transport: 'stdio', command: parts[0], args: parts.slice(1) };
   }
 
   // Default: treat as command
   const parts = targetUrl.split(/\s+/);
+  if (parts.some((p, i) => i > 0 && SHELL_METACHAR_PATTERN.test(p))) {
+    throw new Error('Shell metacharacters detected in command arguments');
+  }
   return { transport: 'stdio', command: parts[0], args: parts.slice(1) };
 }
 

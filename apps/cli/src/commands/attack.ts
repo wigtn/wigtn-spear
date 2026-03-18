@@ -50,6 +50,7 @@ import { createDatabase, closeDatabase, scans, findings as findingsTable } from 
 import type { SpearDatabase, NewScan, NewFinding } from '@wigtn/db';
 import { AuditLogger } from '@wigtn/db';
 import { PluginRegistry } from '@wigtn/plugin-system';
+import { SecretVerifier, RateLimiter, VerificationCache } from '@wigtn/core';
 
 import {
   formatFinding,
@@ -109,6 +110,32 @@ export default class Attack extends Command {
       description: 'Custom header (format: "Key: Value")',
       multiple: true,
     }),
+    'judge-key': Flags.string({
+      description: 'LLM API key for multi-turn attacks and LLM-as-judge (enables advanced mode)',
+      env: 'SPEAR_JUDGE_API_KEY',
+    }),
+    'judge-model': Flags.string({
+      description: 'LLM model for judge/attacker (default: gpt-4o-mini)',
+      default: 'gpt-4o-mini',
+    }),
+    'judge-provider': Flags.string({
+      description: 'LLM provider for judge (openai, anthropic, google)',
+      default: 'openai',
+      options: ['openai', 'anthropic', 'google'],
+    }),
+    'multi-turn': Flags.boolean({
+      description: 'Enable multi-turn attack strategies (Crescendo + TAP)',
+      default: false,
+    }),
+    'multi-turn-strategy': Flags.string({
+      description: 'Multi-turn strategy (crescendo, tap, both)',
+      default: 'both',
+      options: ['crescendo', 'tap', 'both'],
+    }),
+    tui: Flags.boolean({
+      description: 'Enable interactive terminal UI for real-time attack visualization',
+      default: false,
+    }),
   };
 
   async run(): Promise<void> {
@@ -121,6 +148,12 @@ export default class Attack extends Command {
     this.log(printBanner());
     this.log(chalk.red.bold('  ⚡ LIVE ATTACK MODE'));
     this.log(chalk.red(`  Target: ${targetUrl}`));
+    if (flags['judge-key']) {
+      this.log(chalk.yellow(`  🧠 LLM Judge: ${flags['judge-model']} (${flags['judge-provider']})`));
+      if (flags['multi-turn']) {
+        this.log(chalk.yellow(`  🔄 Multi-turn: ${flags['multi-turn-strategy']}`));
+      }
+    }
     this.log('');
 
     // ── Parse Custom Headers ─────────────────────────────────
@@ -145,6 +178,11 @@ export default class Attack extends Command {
       headers: Object.keys(customHeaders).length > 0 ? customHeaders : undefined,
       timeout: flags.timeout,
       maxRequests: flags['max-requests'],
+      judgeApiKey: flags['judge-key'],
+      judgeModel: flags['judge-model'],
+      judgeProvider: flags['judge-provider'] as LiveAttackOptions['judgeProvider'],
+      multiTurn: flags['multi-turn'],
+      multiTurnStrategy: flags['multi-turn-strategy'] as LiveAttackOptions['multiTurnStrategy'],
     };
 
     // ── Step 1: Load Configuration (forced aggressive) ───────
@@ -229,94 +267,73 @@ export default class Attack extends Command {
 
     // ── Step 5: Run Attack Module(s) ─────────────────────────
 
-    const attackSpinner = ora({
-      text: `Running live attack: ${chalk.bold(moduleName)}...`,
-      spinner: 'dots',
-    }).start();
+    const scanTarget: ScanTarget = {
+      path: sourceDir,
+      exclude: config.exclude,
+    };
 
-    this.log(chalk.red.bold('  ⚠️  SENDING LIVE REQUESTS TO TARGET'));
-    this.log('');
+    // Initialize SecretVerifier for live credential validation
+    const rateLimiter = new RateLimiter({ rpm: 30, concurrent: 5 });
+    const verificationCache = new VerificationCache({ maxSize: 200, ttlMs: 5 * 60 * 1000 });
+    const secretVerifier = new SecretVerifier(rateLimiter, verificationCache);
 
-    const collectedFindings: SharedFinding[] = [];
+    const pluginContext: PluginContext = {
+      mode: 'aggressive',
+      workDir: sourceDir,
+      config,
+      logger,
+      liveAttack,
+      secretVerifier,
+    };
 
-    try {
-      const scanTarget: ScanTarget = {
-        path: sourceDir,
-        exclude: config.exclude,
-      };
-
-      const pluginContext: PluginContext = {
-        mode: 'aggressive',
-        workDir: sourceDir,
-        config,
-        logger,
-        liveAttack,
-      };
-
-      // Determine which plugins to run
-      let findingSource: AsyncGenerator<SharedFinding>;
+    // Determine which plugins to run
+    const createFindingSource = (): AsyncGenerator<SharedFinding> => {
       if (moduleName === 'all') {
-        findingSource = registry.runAll(scanTarget, pluginContext);
-      } else {
-        // Map friendly names to plugin IDs
-        const MODULE_MAP: Record<string, string> = {
-          'prompt-inject': 'live-prompt-inject',
-          'mcp-live': 'mcp-live-test',
-          'endpoint-prober': 'endpoint-prober',
-        };
-        const pluginId = MODULE_MAP[moduleName] ?? moduleName;
-        findingSource = registry.runPlugin(pluginId, scanTarget, pluginContext);
+        return registry.runAll(scanTarget, pluginContext);
       }
+      // Map friendly names to plugin IDs
+      const MODULE_MAP: Record<string, string> = {
+        'prompt-inject': 'live-prompt-inject',
+        'mcp-live': 'mcp-live-test',
+        'endpoint-prober': 'endpoint-prober',
+      };
+      const pluginId = MODULE_MAP[moduleName] ?? moduleName;
+      return registry.runPlugin(pluginId, scanTarget, pluginContext);
+    };
 
-      for await (const finding of findingSource) {
-        collectedFindings.push(finding);
-
-        // Insert finding into DB
-        const findingId = `finding_${randomUUID().slice(0, 12)}`;
-        const newFinding: NewFinding = {
-          id: findingId,
-          scanId,
-          ruleId: finding.ruleId,
-          severity: finding.severity,
-          filePath: finding.file ?? null,
-          lineNumber: finding.line ?? null,
-          columnNumber: finding.column ?? null,
-          secretMasked: finding.secretMasked ?? null,
-          cvss: finding.cvss ?? null,
-          mitreTechniques: finding.mitreTechniques
-            ? JSON.stringify(finding.mitreTechniques)
-            : null,
-          remediation: finding.remediation ?? null,
-          metadata: finding.metadata
-            ? JSON.stringify(finding.metadata)
-            : null,
-        };
-
-        try {
-          db.insert(findingsTable).values(newFinding).run();
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          logger.warn('failed to insert finding', {
-            findingId,
-            error: message,
-          });
-        }
-
-        // Real-time output: print each finding as discovered
-        attackSpinner.stop();
-        this.log(`  ${formatFinding(finding)}`);
-        attackSpinner.start(`Attacking... ${chalk.dim(`${collectedFindings.length} findings`)}`);
+    // Helper: insert finding into DB
+    const insertFinding = (finding: SharedFinding): void => {
+      const findingId = `finding_${randomUUID().slice(0, 12)}`;
+      const newFinding: NewFinding = {
+        id: findingId,
+        scanId,
+        ruleId: finding.ruleId,
+        severity: finding.severity,
+        filePath: finding.file ?? null,
+        lineNumber: finding.line ?? null,
+        columnNumber: finding.column ?? null,
+        secretMasked: finding.secretMasked ?? null,
+        cvss: finding.cvss ?? null,
+        mitreTechniques: finding.mitreTechniques
+          ? JSON.stringify(finding.mitreTechniques)
+          : null,
+        remediation: finding.remediation ?? null,
+        metadata: finding.metadata
+          ? JSON.stringify(finding.metadata)
+          : null,
+        confidence: finding.confidence ?? null,
+        fingerprintId: finding.fingerprintId ?? null,
+      };
+      try {
+        db.insert(findingsTable).values(newFinding).run();
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.warn('failed to insert finding', { findingId, error: message });
       }
+    };
 
-      const durationMs = Math.round(performance.now() - startTime);
-      const counts = countBySeverity(collectedFindings);
-
-      attackSpinner.succeed(
-        `Attack complete: ${chalk.bold(String(collectedFindings.length))} findings in ${chalk.dim(formatDuration(durationMs))}`,
-      );
-
-      // ── Step 6: Update Scan Record ─────────────────────────
-
+    // Helper: update scan record on completion
+    const completeScan = async (durationMs: number, counts: ReturnType<typeof countBySeverity>): Promise<void> => {
       try {
         const { eq } = await import('drizzle-orm');
         db.update(scans)
@@ -336,7 +353,6 @@ export default class Attack extends Command {
         const message = err instanceof Error ? err.message : String(err);
         logger.warn('failed to update scan record', { error: message });
       }
-
       audit.logScanCompleted(`attack:${moduleName}`, targetUrl, 'aggressive', {
         critical: counts.critical,
         high: counts.high,
@@ -345,28 +361,10 @@ export default class Attack extends Command {
         info: counts.info,
         durationMs,
       });
+    };
 
-      // ── Step 7: Display Results ────────────────────────────
-
-      this.log(formatSummary(collectedFindings));
-      this.log(`  Grade: ${formatGrade(counts)}`);
-      this.log(`  Attack ID: ${chalk.dim(scanId)}`);
-      this.log('');
-
-      // ── Cleanup ────────────────────────────────────────────
-      closeDatabase(db);
-
-      // Exit with non-zero if critical or high findings detected
-      if (counts.critical > 0 || counts.high > 0) {
-        this.exit(1);
-      }
-    } catch (err: unknown) {
-      attackSpinner.fail('Attack failed');
-
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error('attack execution failed', { error: message });
-
-      // Update scan record to failed status
+    // Helper: mark scan as failed
+    const failScan = async (errorMessage: string): Promise<void> => {
       try {
         const { eq } = await import('drizzle-orm');
         db.update(scans)
@@ -380,9 +378,176 @@ export default class Attack extends Command {
       } catch {
         // Best-effort DB update
       }
+      audit.logScanFailed(`attack:${moduleName}`, targetUrl, 'aggressive', errorMessage);
+    };
 
-      audit.logScanFailed(`attack:${moduleName}`, targetUrl, 'aggressive', message);
-      closeDatabase(db);
+    // ── TUI Mode ───────────────────────────────────────────────
+    const useTui = flags.tui && process.stdout.isTTY !== false;
+
+    if (useTui) {
+      try {
+        const { renderAttackTUI, AttackEventBus } = await import('@wigtn/tui' as string);
+        const bus = new AttackEventBus();
+
+        let aborted = false;
+        const findingSource = createFindingSource();
+        const collectedFindings: SharedFinding[] = [];
+
+        const { waitUntilExit, unmount } = renderAttackTUI({
+          bus,
+          targetUrl,
+          scanId,
+          onQuit: () => {
+            aborted = true;
+            findingSource.return(undefined);
+          },
+        });
+
+        try {
+          for await (const finding of findingSource) {
+            collectedFindings.push(finding);
+            insertFinding(finding);
+
+            bus.emitFinding({
+              ruleId: finding.ruleId,
+              severity: finding.severity as 'critical' | 'high' | 'medium' | 'low' | 'info',
+              message: finding.message ?? finding.ruleId,
+            });
+          }
+
+          const durationMs = Math.round(performance.now() - startTime);
+          const counts = countBySeverity(collectedFindings);
+          const grade = formatGrade(counts);
+
+          bus.emitComplete(durationMs, grade, counts);
+          await completeScan(durationMs, counts);
+
+          // Wait for user to press q to exit
+          await waitUntilExit();
+
+          closeDatabase(db);
+
+          if (counts.critical > 0 || counts.high > 0) {
+            return this.exit(1);
+          }
+        } catch (err: unknown) {
+          if (err && typeof err === 'object' && 'oclif' in err) {
+            throw err;
+          }
+          if (aborted) {
+            // User pressed q -- show partial results
+            const durationMs = Math.round(performance.now() - startTime);
+            const counts = countBySeverity(collectedFindings);
+            const grade = formatGrade(counts);
+            bus.emitComplete(durationMs, grade, counts);
+            await completeScan(durationMs, counts);
+            await waitUntilExit();
+            closeDatabase(db);
+            return this.exit(130);
+          }
+          unmount();
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error('attack execution failed', { error: message });
+          await failScan(message);
+          closeDatabase(db);
+          this.error(`Attack failed: ${message}`, { exit: 2 });
+        }
+      } catch (err: unknown) {
+        // TUI import failed -- fallback to text mode
+        if (err && typeof err === 'object' && 'oclif' in err) {
+          throw err;
+        }
+        logger.warn('TUI mode unavailable, falling back to text mode');
+        // Fall through to text mode below
+        await this.runTextMode({
+          createFindingSource, insertFinding, completeScan, failScan,
+          moduleName, targetUrl, startTime, scanId, db, audit, logger,
+          closeDatabase,
+        });
+        return;
+      }
+    } else {
+      // ── Text Mode (default) ──────────────────────────────────
+      await this.runTextMode({
+        createFindingSource, insertFinding, completeScan, failScan,
+        moduleName, targetUrl, startTime, scanId, db, audit, logger,
+        closeDatabase,
+      });
+    }
+  }
+
+  private async runTextMode(ctx: {
+    createFindingSource: () => AsyncGenerator<SharedFinding>;
+    insertFinding: (f: SharedFinding) => void;
+    completeScan: (durationMs: number, counts: ReturnType<typeof countBySeverity>) => Promise<void>;
+    failScan: (msg: string) => Promise<void>;
+    moduleName: string;
+    targetUrl: string;
+    startTime: number;
+    scanId: string;
+    db: SpearDatabase;
+    audit: AuditLogger;
+    logger: ReturnType<typeof createLogger>;
+    closeDatabase: typeof closeDatabase;
+  }): Promise<void> {
+    const attackSpinner = ora({
+      text: `Running live attack: ${chalk.bold(ctx.moduleName)}...`,
+      spinner: 'dots',
+    }).start();
+
+    this.log(chalk.red.bold('  ⚠️  SENDING LIVE REQUESTS TO TARGET'));
+    this.log('');
+
+    const collectedFindings: SharedFinding[] = [];
+
+    try {
+      const findingSource = ctx.createFindingSource();
+
+      for await (const finding of findingSource) {
+        collectedFindings.push(finding);
+        ctx.insertFinding(finding);
+
+        // Real-time output: print each finding as discovered
+        attackSpinner.stop();
+        this.log(`  ${formatFinding(finding)}`);
+        attackSpinner.start(`Attacking... ${chalk.dim(`${collectedFindings.length} findings`)}`);
+      }
+
+      const durationMs = Math.round(performance.now() - ctx.startTime);
+      const counts = countBySeverity(collectedFindings);
+
+      attackSpinner.succeed(
+        `Attack complete: ${chalk.bold(String(collectedFindings.length))} findings in ${chalk.dim(formatDuration(durationMs))}`,
+      );
+
+      await ctx.completeScan(durationMs, counts);
+
+      // ── Display Results ────────────────────────────────────
+
+      this.log(formatSummary(collectedFindings));
+      this.log(`  Grade: ${formatGrade(counts)}`);
+      this.log(`  Attack ID: ${chalk.dim(ctx.scanId)}`);
+      this.log('');
+
+      // ── Cleanup ────────────────────────────────────────────
+      ctx.closeDatabase(ctx.db);
+
+      // Exit with non-zero if critical or high findings detected
+      if (counts.critical > 0 || counts.high > 0) {
+        return this.exit(1);
+      }
+    } catch (err: unknown) {
+      // Don't catch oclif ExitError -- let it propagate
+      if (err && typeof err === 'object' && 'oclif' in err) {
+        throw err;
+      }
+      attackSpinner.fail('Attack failed');
+
+      const message = err instanceof Error ? err.message : String(err);
+      ctx.logger.error('attack execution failed', { error: message });
+
+      await ctx.failScan(message);
+      ctx.closeDatabase(ctx.db);
 
       this.error(`Attack failed: ${message}`, { exit: 2 });
     }

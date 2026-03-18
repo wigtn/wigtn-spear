@@ -19,7 +19,10 @@
  *   - Only probes and reports -- does NOT exploit
  */
 
+import { createHash } from 'node:crypto';
 import type { SpearLogger, LiveAttackOptions } from '@wigtn/shared';
+import { matchesBaseline } from './baseline-fingerprinter.js';
+import type { BaselineFingerprint } from './baseline-fingerprinter.js';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -119,15 +122,17 @@ export class ProbeEngine {
   private readonly maxRequests: number;
   private readonly customHeaders: Record<string, string>;
   private readonly logger: SpearLogger;
+  private readonly baseline: BaselineFingerprint | null;
   private requestCount = 0;
 
-  constructor(liveAttack: LiveAttackOptions, logger: SpearLogger) {
+  constructor(liveAttack: LiveAttackOptions, logger: SpearLogger, baseline?: BaselineFingerprint | null) {
     // Ensure base URL has no trailing slash
     this.baseUrl = liveAttack.targetUrl.replace(/\/+$/, '');
     this.timeout = liveAttack.timeout ?? DEFAULT_TIMEOUT_MS;
     this.maxRequests = liveAttack.maxRequests ?? 500;
     this.customHeaders = liveAttack.headers ?? {};
     this.logger = logger;
+    this.baseline = baseline ?? null;
   }
 
   /**
@@ -165,6 +170,15 @@ export class ProbeEngine {
     if (noAuth === null) {
       this.logger.debug('No-auth request failed (network error), skipping endpoint', {
         endpoint: `${method} ${endpoint.path}`,
+      });
+      return null;
+    }
+
+    // Baseline FP filter: if noAuth response matches the catch-all baseline, skip
+    if (matchesBaseline(this.baseline, noAuth.status, noAuth.bodyText)) {
+      this.logger.debug('Response matches baseline (catch-all), filtering as FP', {
+        endpoint: `${method} ${endpoint.path}`,
+        status: noAuth.status,
       });
       return null;
     }
@@ -532,6 +546,7 @@ export class ProbeEngine {
         status: response.status,
         bodySize: bodyText.length,
         bodyText,
+        bodyHash: createHash('sha256').update(bodyText, 'utf8').digest('hex'),
         serverHeader: response.headers.get('server') ?? undefined,
         headers: response.headers,
         durationMs,
@@ -560,7 +575,26 @@ export class ProbeEngine {
   private buildUrl(path: string): string {
     // Ensure path starts with /
     const normalizedPath = path.startsWith('/') ? path : '/' + path;
-    return this.baseUrl + normalizedPath;
+    const fullUrl = this.baseUrl + normalizedPath;
+
+    // Validate URL structure and ensure origin matches base
+    try {
+      const parsed = new URL(fullUrl);
+      const base = new URL(this.baseUrl);
+      if (parsed.origin !== base.origin) {
+        this.logger.warn('buildUrl: origin mismatch, using base origin', {
+          path,
+          parsedOrigin: parsed.origin,
+          baseOrigin: base.origin,
+        });
+        return base.origin + parsed.pathname + parsed.search;
+      }
+    } catch {
+      this.logger.warn('buildUrl: invalid URL constructed', { path, fullUrl });
+      // Fall through with the raw concatenation
+    }
+
+    return fullUrl;
   }
 
   /**
@@ -594,6 +628,7 @@ interface RequestResult {
   status: number;
   bodySize: number;
   bodyText: string;
+  bodyHash: string;
   serverHeader?: string;
   headers: Headers;
   durationMs: number;

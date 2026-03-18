@@ -17,6 +17,8 @@
  */
 
 import type { SpearLogger } from '@wigtn/shared';
+import { matchesBaseline } from './baseline-fingerprinter.js';
+import type { BaselineFingerprint } from './baseline-fingerprinter.js';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -57,6 +59,8 @@ export interface AiInfraScanConfig {
   timeout?: number;
   /** Logger instance */
   logger?: SpearLogger;
+  /** Baseline fingerprint for FP elimination (catch-all filter) */
+  baseline?: BaselineFingerprint | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────
@@ -407,12 +411,14 @@ export async function scanAiInfra(
   const vectorDbEndpoints: DiscoveredAiEndpoint[] = [];
   let totalProbed = 0;
 
+  const baseline = config.baseline;
+
   // Deduplicate paths (some overlap between ML and VectorDB categories)
   const allTargets = deduplicateTargets([...ML_ENDPOINTS, ...VECTOR_DB_ENDPOINTS]);
 
   for (const target of allTargets) {
     const url = baseUrl + target.path;
-    const result = await probeEndpoint(url, target, timeout);
+    const result = await probeEndpoint(url, target, timeout, baseline);
     totalProbed++;
 
     if (result) {
@@ -449,6 +455,7 @@ async function probeEndpoint(
   url: string,
   target: ProbeTarget,
   timeout: number,
+  baseline?: BaselineFingerprint | null,
 ): Promise<DiscoveredAiEndpoint | null> {
   const start = performance.now();
   const method = target.method ?? 'GET';
@@ -483,6 +490,9 @@ async function probeEndpoint(
     if (response.status === 404 || response.status === 502 || response.status === 503) {
       return null;
     }
+
+    // Baseline FP filter: if response matches the catch-all baseline, skip
+    if (matchesBaseline(baseline, response.status, bodyText)) return null;
 
     // Confirm via pattern matching if specified
     if (target.confirmPattern && !bodyText.includes(target.confirmPattern)) {

@@ -152,11 +152,13 @@ export class WsAttackClient {
 
     return new Promise<WsPayloadResult>((resolve) => {
       let resolved = false;
+        const ac = new AbortController();
 
       const done = (error?: string) => {
         if (resolved) return;
         resolved = true;
         clearTimeout(overallTimer);
+        ac.abort();
         try {
           ws.close();
         } catch {
@@ -211,7 +213,7 @@ export class WsAttackClient {
 
         // Give the server time to respond, then close
         setTimeout(() => done(), this.responseWaitMs);
-      });
+      }, { signal: ac.signal });
 
       ws.addEventListener('message', (event: MessageEvent) => {
         const raw =
@@ -222,15 +224,15 @@ export class WsAttackClient {
         if (extracted) {
           fragments.push(extracted);
         }
-      });
+      }, { signal: ac.signal });
 
       ws.addEventListener('error', () => {
         done('WebSocket error');
-      });
+      }, { signal: ac.signal });
 
       ws.addEventListener('close', () => {
         done();
-      });
+      }, { signal: ac.signal });
     });
   }
 

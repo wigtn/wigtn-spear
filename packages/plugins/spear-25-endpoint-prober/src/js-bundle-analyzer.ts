@@ -20,7 +20,11 @@
  *         A01 (Broken Access Control) -- hardcoded credentials in frontend
  */
 
-import type { SpearLogger } from '@wigtn/shared';
+import type { SpearLogger, SecretVerifierInterface } from '@wigtn/shared';
+import { recoverAndScan } from './sourcemap-recovery.js';
+import type { SourcemapRecovery } from './sourcemap-recovery.js';
+import { scanDependencyCves } from './js-dependency-cve.js';
+import type { DependencyCveResult } from './js-dependency-cve.js';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -35,6 +39,12 @@ export interface JsBundleResult {
   sourceMaps: DiscoveredSourceMap[];
   /** Total bytes of JS analyzed */
   totalBytesAnalyzed: number;
+  /** Environment variable leaks found in bundles */
+  envLeaks: DiscoveredEnvLeak[];
+  /** Sourcemap deep recovery results */
+  sourcemapRecoveries: SourcemapRecovery[];
+  /** Dependency CVE scan results */
+  dependencyCves: DependencyCveResult | null;
 }
 
 export interface DiscoveredScript {
@@ -56,6 +66,29 @@ export interface DiscoveredSecret {
   /** Matched pattern name */
   pattern: string;
   /** Surrounding context (50 chars) */
+  context: string;
+  /** Live verification result (if secretVerifier was provided) */
+  verification?: {
+    verified: boolean;
+    active: boolean;
+    service: string;
+    permissions?: string[];
+    identity?: string;
+  };
+}
+
+export interface DiscoveredEnvLeak {
+  /** Framework that uses this prefix */
+  framework: string;
+  /** Variable name (e.g. NEXT_PUBLIC_API_KEY) */
+  variable: string;
+  /** Value (truncated/masked) */
+  maskedValue: string;
+  /** Whether the variable name suggests sensitive content */
+  isSensitive: boolean;
+  /** Script URL where found */
+  scriptUrl: string;
+  /** Surrounding context */
   context: string;
 }
 
@@ -92,6 +125,10 @@ export interface JsBundleScanConfig {
   maxFileSize?: number;
   /** Logger instance */
   logger?: SpearLogger;
+  /** Secret verifier for live credential validation */
+  secretVerifier?: SecretVerifierInterface;
+  /** Enable sourcemap deep recovery (default: true) */
+  enableDeepRecovery?: boolean;
 }
 
 // ─── Constants ────────────────────────────────────────────────
@@ -220,6 +257,36 @@ const ENDPOINT_PATTERNS: readonly { regex: RegExp; category: DiscoveredJsEndpoin
   { regex: /["'`](https?:\/\/[^"'`\s]*?api\.iamport\.kr[^"'`\s]*?)["'`]/g, category: 'api' },
 ];
 
+// ─── Environment Variable Leak Patterns ──────────────────────
+
+interface EnvLeakPattern {
+  framework: string;
+  prefix: string;
+  regex: RegExp;
+}
+
+const ENV_LEAK_PATTERNS: readonly EnvLeakPattern[] = [
+  // Next.js
+  { framework: 'Next.js', prefix: 'NEXT_PUBLIC_', regex: /["']?(NEXT_PUBLIC_[A-Z_][A-Z0-9_]*)["']?\s*[:=,]\s*["']([^"']{1,200})["']/g },
+  // Vite
+  { framework: 'Vite', prefix: 'VITE_', regex: /["']?(VITE_[A-Z_][A-Z0-9_]*)["']?\s*[:=,]\s*["']([^"']{1,200})["']/g },
+  // Create React App
+  { framework: 'CRA', prefix: 'REACT_APP_', regex: /["']?(REACT_APP_[A-Z_][A-Z0-9_]*)["']?\s*[:=,]\s*["']([^"']{1,200})["']/g },
+  // Expo
+  { framework: 'Expo', prefix: 'EXPO_PUBLIC_', regex: /["']?(EXPO_PUBLIC_[A-Z_][A-Z0-9_]*)["']?\s*[:=,]\s*["']([^"']{1,200})["']/g },
+  // Nuxt
+  { framework: 'Nuxt', prefix: 'NUXT_PUBLIC_', regex: /["']?(NUXT_PUBLIC_[A-Z_][A-Z0-9_]*)["']?\s*[:=,]\s*["']([^"']{1,200})["']/g },
+  { framework: 'Nuxt', prefix: 'NUXT_ENV_', regex: /["']?(NUXT_ENV_[A-Z_][A-Z0-9_]*)["']?\s*[:=,]\s*["']([^"']{1,200})["']/g },
+];
+
+/** Keywords indicating a sensitive environment variable */
+const SENSITIVE_KEYWORDS = ['key', 'secret', 'password', 'token', 'api', 'auth', 'private', 'credential'];
+
+function isSensitiveEnvVar(varName: string): boolean {
+  const lower = varName.toLowerCase();
+  return SENSITIVE_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
 // ─── Scanner ──────────────────────────────────────────────────
 
 /**
@@ -238,6 +305,7 @@ export async function analyzeJsBundles(
   const maxScripts = config.maxScripts ?? DEFAULT_MAX_SCRIPTS;
   const maxFileSize = config.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
   const logger = config.logger;
+  const enableDeepRecovery = config.enableDeepRecovery ?? true;
 
   logger?.info('js-bundle-analyzer: starting', { baseUrl });
 
@@ -247,7 +315,13 @@ export async function analyzeJsBundles(
     endpoints: [],
     sourceMaps: [],
     totalBytesAnalyzed: 0,
+    envLeaks: [],
+    sourcemapRecoveries: [],
+    dependencyCves: null,
   };
+
+  // Track JS contents for dependency CVE scanning
+  const jsContents: Array<{ content: string; url: string }> = [];
 
   // ── Step 1: Fetch HTML ────────────────────────────────────
 
@@ -282,6 +356,7 @@ export async function analyzeJsBundles(
   for (const inline of inlineScripts) {
     scanForSecrets(inline, baseUrl + ' (inline)', result);
     scanForEndpoints(inline, baseUrl + ' (inline)', result);
+    scanForEnvLeaks(inline, baseUrl + ' (inline)', result);
   }
 
   // ── Step 3: Download and Analyze Scripts ───────────────────
@@ -326,11 +401,17 @@ export async function analyzeJsBundles(
 
       result.totalBytesAnalyzed += jsContent.length;
 
+      // Collect for dependency CVE scanning
+      jsContents.push({ content: jsContent, url: scriptUrl });
+
       // Scan for secrets
       scanForSecrets(jsContent, scriptUrl, result);
 
       // Scan for endpoints
       scanForEndpoints(jsContent, scriptUrl, result);
+
+      // Scan for env leaks
+      scanForEnvLeaks(jsContent, scriptUrl, result);
 
       // Check source map
       if (hasSourceMap) {
@@ -375,11 +456,83 @@ export async function analyzeJsBundles(
     await sleep(50);
   }
 
+  // ── Step 4: Secret Live Verification ─────────────────────────
+
+  if (config.secretVerifier && result.secrets.length > 0) {
+    logger?.info('js-bundle-analyzer: verifying discovered secrets', {
+      count: result.secrets.length,
+    });
+
+    // We need raw values for verification -- re-extract from JS content
+    // Only verify secrets where we can extract the raw value
+    for (const secret of result.secrets) {
+      try {
+        const rawValue = extractRawSecret(secret, jsContents);
+        if (!rawValue) continue;
+
+        const verResult = await config.secretVerifier.verify(rawValue);
+        secret.verification = {
+          verified: verResult.verified,
+          active: verResult.active,
+          service: verResult.service,
+          permissions: verResult.permissions,
+          identity: verResult.identity,
+        };
+
+        // Immediately dereference raw value
+        // (Variable scope ensures it's eligible for GC)
+      } catch {
+        // Verification failure is non-fatal
+      }
+    }
+  }
+
+  // ── Step 5: Sourcemap Deep Recovery ─────────────────────────
+
+  if (enableDeepRecovery) {
+    const accessibleMaps = result.sourceMaps.filter((m) => m.accessible);
+    for (const sourceMap of accessibleMaps) {
+      try {
+        const recovery = await withTimeout(
+          recoverAndScan({
+            sourcemapUrl: sourceMap.url,
+            timeout,
+            logger,
+          }),
+          timeout * 2,
+          `Sourcemap recovery timeout: ${sourceMap.url}`,
+        );
+        if (recovery.secrets.length > 0 || recovery.envReferences.length > 0) {
+          result.sourcemapRecoveries.push(recovery);
+        }
+      } catch (err) {
+        logger?.warn('js-bundle-analyzer: sourcemap recovery failed', {
+          url: sourceMap.url,
+          error: String(err),
+        });
+      }
+    }
+  }
+
+  // ── Step 6: Dependency CVE Scan ─────────────────────────────
+
+  if (jsContents.length > 0) {
+    const sourcemapSources = result.sourceMaps
+      .filter((m) => m.accessible && m.sources)
+      .map((m) => ({ sources: m.sources!, url: m.url }));
+
+    result.dependencyCves = scanDependencyCves(jsContents, sourcemapSources, logger);
+  }
+
   logger?.info('js-bundle-analyzer: scan complete', {
     scripts: result.scripts.length,
     secrets: result.secrets.length,
+    verifiedSecrets: result.secrets.filter((s) => s.verification?.active).length,
     endpoints: result.endpoints.length,
     sourceMaps: result.sourceMaps.filter((m) => m.accessible).length,
+    envLeaks: result.envLeaks.length,
+    sourcemapRecoveries: result.sourcemapRecoveries.length,
+    dependencyCves: result.dependencyCves?.cves.length ?? 0,
     totalBytes: result.totalBytesAnalyzed,
   });
 
@@ -430,15 +583,18 @@ function scanForSecrets(
   scriptUrl: string,
   result: JsBundleResult,
 ): void {
+  // Limit regex scanning to first 500KB to avoid ReDoS
+  const scanContent = content.length > 512_000 ? content.slice(0, 512_000) : content;
+
   for (const pattern of SECRET_PATTERNS) {
-    const match = pattern.regex.exec(content);
+    const match = pattern.regex.exec(scanContent);
     if (match) {
       const value = match[1] ?? match[0];
       const masked = maskSecret(value);
       const idx = match.index;
       const contextStart = Math.max(0, idx - 20);
-      const contextEnd = Math.min(content.length, idx + match[0].length + 20);
-      const context = content.slice(contextStart, contextEnd).replace(/\n/g, ' ');
+      const contextEnd = Math.min(scanContent.length, idx + match[0].length + 20);
+      const context = scanContent.slice(contextStart, contextEnd).replace(/\n/g, ' ');
 
       // Deduplicate
       const exists = result.secrets.some(
@@ -553,6 +709,73 @@ async function probeSourceMap(
   }
 }
 
+// ─── Environment Variable Leak Scanning ──────────────────────
+
+function scanForEnvLeaks(
+  content: string,
+  scriptUrl: string,
+  result: JsBundleResult,
+): void {
+  const seen = new Set(result.envLeaks.map((e) => e.variable));
+
+  for (const { framework, regex } of ENV_LEAK_PATTERNS) {
+    const re = new RegExp(regex.source, regex.flags);
+    let match;
+
+    while ((match = re.exec(content)) !== null) {
+      const variable = match[1]!;
+      const rawValue = match[2]!;
+
+      if (seen.has(variable)) continue;
+      // Filter noise: skip if value looks like a placeholder or is very short
+      if (rawValue.length < 3 || rawValue === 'undefined' || rawValue === 'null' || rawValue === 'true' || rawValue === 'false') continue;
+
+      seen.add(variable);
+
+      const maskedValue = rawValue.length > 12
+        ? rawValue.slice(0, 8) + '***'
+        : rawValue.slice(0, 4) + '***';
+
+      const idx = match.index;
+      const contextStart = Math.max(0, idx - 10);
+      const contextEnd = Math.min(content.length, idx + match[0].length + 10);
+      const context = content.slice(contextStart, contextEnd).replace(/\n/g, ' ').slice(0, MAX_CONTEXT_LENGTH);
+
+      result.envLeaks.push({
+        framework,
+        variable,
+        maskedValue,
+        isSensitive: isSensitiveEnvVar(variable),
+        scriptUrl,
+        context,
+      });
+    }
+  }
+}
+
+// ─── Raw Secret Extraction (for verification) ────────────────
+
+function extractRawSecret(
+  secret: DiscoveredSecret,
+  jsContents: Array<{ content: string; url: string }>,
+): string | null {
+  // Find the matching pattern
+  const pattern = SECRET_PATTERNS.find((p) => p.name === secret.pattern);
+  if (!pattern) return null;
+
+  // Search the JS content where the secret was found
+  for (const { content, url } of jsContents) {
+    if (url !== secret.scriptUrl && !secret.scriptUrl.includes('(inline)')) continue;
+
+    const match = pattern.regex.exec(content);
+    if (match) {
+      return match[1] ?? match[0];
+    }
+  }
+
+  return null;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────
 
 function resolveUrl(ref: string, base: string): string | null {
@@ -590,6 +813,17 @@ function isNoiseUrl(url: string): boolean {
 function maskSecret(value: string): string {
   if (value.length <= 8) return '***';
   return value.slice(0, 8) + '***';
+}
+
+/** Race a promise against a timeout. Rejects with message if timeout expires. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
 }
 
 function sleep(ms: number): Promise<void> {

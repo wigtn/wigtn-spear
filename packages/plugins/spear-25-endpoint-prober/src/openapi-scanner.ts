@@ -21,6 +21,8 @@
  */
 
 import type { SpearLogger } from '@wigtn/shared';
+import { matchesBaseline } from './baseline-fingerprinter.js';
+import type { BaselineFingerprint } from './baseline-fingerprinter.js';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -107,6 +109,8 @@ export interface OpenApiScanConfig {
   timeout?: number;
   /** Logger instance */
   logger?: SpearLogger;
+  /** Baseline fingerprint for FP elimination (catch-all filter) */
+  baseline?: BaselineFingerprint | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────
@@ -201,10 +205,12 @@ export async function scanOpenApi(
   const exposedUrls: ExposedDocUrl[] = [];
   let rawSpec: Record<string, unknown> | null = null;
 
+  const baseline = config.baseline;
+
   // Probe all documentation paths
   for (const path of DOC_PATHS) {
     const url = baseUrl + path;
-    const result = await probeDocUrl(url, timeout);
+    const result = await probeDocUrl(url, timeout, baseline);
 
     if (result.status >= 200 && result.status < 400) {
       exposedUrls.push(result);
@@ -278,6 +284,7 @@ export async function scanOpenApi(
 async function probeDocUrl(
   url: string,
   timeout: number,
+  baseline?: BaselineFingerprint | null,
 ): Promise<ExposedDocUrl> {
   const start = performance.now();
 
@@ -305,8 +312,19 @@ async function probeDocUrl(
       url.endsWith('.yaml') ||
       (contentType?.includes('application/json') ?? false);
 
-    // Read body to avoid connection leaks
-    try { await response.text(); } catch { /* ignore */ }
+    // Read body for baseline comparison and to avoid connection leaks
+    let bodyText = '';
+    try { bodyText = await response.text(); } catch { /* ignore */ }
+
+    // Baseline FP filter: if response matches the catch-all baseline, treat as not found
+    if (matchesBaseline(baseline, response.status, bodyText)) {
+      return {
+        url,
+        status: 0, // Mark as not found
+        isSpec: false,
+        latencyMs,
+      };
+    }
 
     return {
       url,

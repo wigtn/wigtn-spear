@@ -67,6 +67,8 @@ CREATE TABLE IF NOT EXISTS findings (
   mitre_techniques TEXT,
   remediation TEXT,
   metadata TEXT,
+  confidence TEXT,
+  fingerprint_id TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

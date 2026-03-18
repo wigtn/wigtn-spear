@@ -33,6 +33,7 @@
  */
 
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import type {
   SpearPlugin,
   Finding,
@@ -56,9 +57,19 @@ import type { AiInfraResult, DiscoveredAiEndpoint } from './ai-infra-scanner.js'
 import { scanDebugEndpoints } from './debug-scanner.js';
 import type { DebugScanResult, DiscoveredDebugEndpoint } from './debug-scanner.js';
 import { analyzeJsBundles } from './js-bundle-analyzer.js';
-import type { JsBundleResult, DiscoveredSecret, DiscoveredSourceMap } from './js-bundle-analyzer.js';
+import type { JsBundleResult, DiscoveredSecret, DiscoveredSourceMap, DiscoveredEnvLeak } from './js-bundle-analyzer.js';
 import { analyzeHttpHeaders } from './http-header-analyzer.js';
 import type { HeaderAnalysisResult, MissingHeader, InsecureCookie } from './http-header-analyzer.js';
+import { captureBaseline } from './baseline-fingerprinter.js';
+import type { BaselineFingerprint } from './baseline-fingerprinter.js';
+import { provokeErrors } from './error-provocator.js';
+import type { ErrorProvocationResult } from './error-provocator.js';
+import { bruteforcePaths, getWordlistSize } from './path-bruteforce.js';
+import type { BruteforceResult } from './path-bruteforce.js';
+import { scanGitExposure } from './git-exposure-scanner.js';
+import type { GitExposureResult } from './git-exposure-scanner.js';
+import { analyzeDiscoveredPaths } from './admin-panel-scanner.js';
+import type { AdminScanResult } from './admin-panel-scanner.js';
 
 // ─── Plugin Implementation ────────────────────────────────────
 
@@ -125,21 +136,25 @@ export class EndpointProberPlugin implements SpearPlugin {
 
     // ── Phase 2: Static Analysis Findings (Safe Mode) ─────────
 
-    // Always emit static analysis findings for endpoints with no auth
-    let staticFindingsCount = 0;
+    // Skip static analysis in live attack mode -- it scans local code, not the target
+    if (!context.liveAttack) {
+      let staticFindingsCount = 0;
 
-    for (const endpoint of discoveredEndpoints) {
-      if (!endpoint.hasAuth) {
-        staticFindingsCount++;
-        yield createStaticNoAuthFinding(endpoint);
+      for (const endpoint of discoveredEndpoints) {
+        if (!endpoint.hasAuth) {
+          staticFindingsCount++;
+          yield createStaticNoAuthFinding(endpoint);
+        }
       }
-    }
 
-    if (staticFindingsCount > 0) {
-      context.logger.info('Static analysis findings emitted', {
-        noAuthEndpoints: staticFindingsCount,
-        totalEndpoints: discoveredEndpoints.length,
-      });
+      if (staticFindingsCount > 0) {
+        context.logger.info('Static analysis findings emitted', {
+          noAuthEndpoints: staticFindingsCount,
+          totalEndpoints: discoveredEndpoints.length,
+        });
+      }
+    } else {
+      context.logger.info('Static analysis skipped in live attack mode');
     }
 
     // ── Phase 3: Live Probing (Aggressive Mode) ───────────────
@@ -155,6 +170,23 @@ export class EndpointProberPlugin implements SpearPlugin {
     context.logger.info('Starting live endpoint probing', {
       targetUrl: context.liveAttack.targetUrl,
     });
+
+    // ── Baseline Fingerprint Capture (FP Elimination) ────────
+    const baseline = await captureBaseline({
+      baseUrl: context.liveAttack.targetUrl,
+      timeout: context.liveAttack.timeout ?? 5000,
+      logger: context.logger,
+    });
+
+    if (baseline?.isCatchAll) {
+      context.logger.info('Catch-all route detected, baseline FP filter active', {
+        status: baseline.status,
+        bodyLength: baseline.bodyLength,
+      });
+    }
+
+    // ── Finding Dedup Set ────────────────────────────────────
+    const emittedFingerprints = new Set<string>();
 
     // Track endpoints to avoid duplicates between source/config/openapi
     const endpointsToProbeKeys = new Set<string>();
@@ -211,6 +243,7 @@ export class EndpointProberPlugin implements SpearPlugin {
       baseUrl: context.liveAttack.targetUrl,
       timeout: context.liveAttack.timeout ?? 8000,
       logger: context.logger,
+      baseline,
     });
 
     if (openApiResult.found) {
@@ -309,6 +342,7 @@ export class EndpointProberPlugin implements SpearPlugin {
       baseUrl: context.liveAttack.targetUrl,
       timeout: context.liveAttack.timeout ?? 5000,
       logger: context.logger,
+      baseline,
     });
 
     // ML model management endpoints (LLM04)
@@ -372,6 +406,7 @@ export class EndpointProberPlugin implements SpearPlugin {
       baseUrl: context.liveAttack.targetUrl,
       timeout: context.liveAttack.timeout ?? 5000,
       logger: context.logger,
+      baseline,
     });
 
     for (const ep of debugResult.endpoints) {
@@ -437,18 +472,27 @@ export class EndpointProberPlugin implements SpearPlugin {
       baseUrl: context.liveAttack.targetUrl,
       timeout: context.liveAttack.timeout ?? 10000,
       logger: context.logger,
+      secretVerifier: context.secretVerifier,
+      enableDeepRecovery: true,
     });
 
     // Secrets found in JS bundles
     for (const secret of jsBundleResult.secrets) {
-      yield {
+      const isVerifiedActive = secret.verification?.verified && secret.verification?.active;
+      const message = isVerifiedActive
+        ? `VERIFIED LIVE SECRET: ${secret.pattern} ${secret.masked} is ACTIVE` +
+          (secret.verification?.permissions ? ` (${secret.verification.permissions.join(', ')})` : ' (no domain restriction)') +
+          ` — found in ${secret.scriptUrl}`
+        : `Hardcoded secret in JavaScript bundle: ${secret.pattern} — ${secret.masked} ` +
+          `found in ${secret.scriptUrl}`;
+
+      const finding: Finding = {
         ruleId: 'spear-25/js-secret-exposed',
-        severity: 'critical',
-        message:
-          `Hardcoded secret in JavaScript bundle: ${secret.pattern} — ${secret.masked} ` +
-          `found in ${secret.scriptUrl}`,
-        cvss: 9.1,
+        severity: isVerifiedActive ? 'critical' : 'high',
+        message,
+        cvss: isVerifiedActive ? 9.8 : 9.1,
         mitreTechniques: ['T1552'],
+        confidence: isVerifiedActive ? 'confirmed' : 'high',
         remediation:
           'Never embed API keys or secrets in frontend JavaScript. ' +
           'Use server-side proxying or environment-specific configuration. ' +
@@ -460,9 +504,14 @@ export class EndpointProberPlugin implements SpearPlugin {
           masked: secret.masked,
           scriptUrl: secret.scriptUrl,
           context: secret.context,
+          verification: secret.verification,
           analysisType: 'live',
         },
       };
+
+      if (yieldDeduped(finding, emittedFingerprints)) {
+        yield finding;
+      }
     }
 
     // Accessible source maps
@@ -554,6 +603,7 @@ export class EndpointProberPlugin implements SpearPlugin {
         message: `Missing security header: ${missing.header} — ${missing.impact}`,
         cvss: missing.severity === 'critical' ? 8.1 : missing.severity === 'high' ? 6.5 : 4.3,
         mitreTechniques: ['T1189'],
+        confidence: 'high',
         remediation:
           `Add the ${missing.header} header to all responses. ` +
           `Recommended value: ${missing.recommended}`,
@@ -624,6 +674,7 @@ export class EndpointProberPlugin implements SpearPlugin {
         message: `CORS misconfiguration: ${cors.description}`,
         cvss: corsSeverity === 'critical' ? 9.1 : 5.3,
         mitreTechniques: ['T1189'],
+        confidence: 'confirmed',
         remediation:
           'Configure CORS to allow only specific trusted origins. ' +
           'Never combine Access-Control-Allow-Origin: * with Access-Control-Allow-Credentials: true.',
@@ -654,7 +705,410 @@ export class EndpointProberPlugin implements SpearPlugin {
       };
     }
 
-    const probeEngine = new ProbeEngine(context.liveAttack, context.logger);
+    // ── Phase 3g: Environment Variable Leak Findings ────────────
+
+    for (const envLeak of jsBundleResult.envLeaks) {
+      const severity: Severity = envLeak.isSensitive ? 'high' : 'medium';
+      const finding: Finding = {
+        ruleId: 'spear-25/build-env-leak',
+        severity,
+        message:
+          `Build-time environment variable exposed: ${envLeak.variable}=${envLeak.maskedValue} ` +
+          `(${envLeak.framework}) in ${envLeak.scriptUrl}` +
+          (envLeak.isSensitive ? ' — SENSITIVE variable name detected' : ''),
+        cvss: envLeak.isSensitive ? 7.5 : 4.3,
+        mitreTechniques: ['T1552'],
+        confidence: 'confirmed',
+        remediation:
+          `Review the ${envLeak.variable} environment variable. ` +
+          'Ensure it does not contain sensitive values. ' +
+          'Use server-side environment variables for secrets, not client-side prefixed ones.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'build_env_leak',
+          framework: envLeak.framework,
+          variable: envLeak.variable,
+          isSensitive: envLeak.isSensitive,
+          analysisType: 'live',
+        },
+      };
+
+      if (yieldDeduped(finding, emittedFingerprints)) {
+        yield finding;
+      }
+    }
+
+    // ── Phase 3h: Sourcemap Deep Recovery Findings ──────────────
+
+    for (const recovery of jsBundleResult.sourcemapRecoveries) {
+      for (const secret of recovery.secrets) {
+        const finding: Finding = {
+          ruleId: 'spear-25/sourcemap-recovered-secret',
+          severity: 'critical',
+          message:
+            `Secret recovered from sourcemap: ${secret.type} — ${secret.masked} ` +
+            `in ${secret.sourceFile}:${secret.line} (via ${recovery.sourcemapUrl})`,
+          cvss: 9.1,
+          mitreTechniques: ['T1552'],
+          confidence: 'high',
+          remediation:
+            'Remove source maps from production. The original source code is recoverable ' +
+            'and contains embedded secrets. Rotate all exposed credentials immediately.',
+          metadata: {
+            pluginId: 'endpoint-prober',
+            category: 'sourcemap_recovered_secret',
+            secretType: secret.type,
+            masked: secret.masked,
+            sourceFile: secret.sourceFile,
+            line: secret.line,
+            sourcemapUrl: recovery.sourcemapUrl,
+            attackChain: ['sourcemap_access', 'source_recovery', 'secret_extraction'],
+            analysisType: 'live',
+          },
+        };
+
+        if (yieldDeduped(finding, emittedFingerprints)) {
+          yield finding;
+        }
+      }
+
+      // Env var references from sourcemap recovery
+      for (const envRef of recovery.envReferences) {
+        const finding: Finding = {
+          ruleId: 'spear-25/sourcemap-env-reference',
+          severity: 'medium',
+          message:
+            `Environment variable reference in recovered source: ${envRef.variable} ` +
+            `in ${envRef.sourceFile}:${envRef.line}`,
+          cvss: 4.3,
+          mitreTechniques: ['T1592'],
+          confidence: 'high',
+          metadata: {
+            pluginId: 'endpoint-prober',
+            category: 'sourcemap_env_reference',
+            variable: envRef.variable,
+            sourceFile: envRef.sourceFile,
+            sourcemapUrl: recovery.sourcemapUrl,
+            analysisType: 'live',
+          },
+        };
+
+        if (yieldDeduped(finding, emittedFingerprints)) {
+          yield finding;
+        }
+      }
+    }
+
+    // ── Phase 3i: Error Provocation ────────────────────────────
+
+    context.logger.info('Starting error provocation');
+
+    const errorResults = await provokeErrors({
+      baseUrl: context.liveAttack.targetUrl,
+      baseline,
+      timeout: context.liveAttack.timeout ?? 5000,
+      maxRequests: 15,
+      logger: context.logger,
+    });
+
+    for (const errResult of errorResults) {
+      for (const leak of errResult.leaks) {
+        const severity: Severity = leak.type === 'db_connection' || leak.type === 'env_variable' ? 'critical' : 'high';
+        const finding: Finding = {
+          ruleId: 'spear-25/error-info-leak',
+          severity,
+          message:
+            `Error provocation leaked ${leak.type}: "${leak.value}" ` +
+            `(technique: ${errResult.technique}, status: ${errResult.status})`,
+          cvss: severity === 'critical' ? 9.1 : 6.5,
+          mitreTechniques: ['T1592'],
+          confidence: 'confirmed',
+          remediation:
+            'Configure error handling to return generic error messages in production. ' +
+            'Never expose stack traces, file paths, database connection strings, or internal IPs.',
+          metadata: {
+            pluginId: 'endpoint-prober',
+            category: `error_${leak.type}`,
+            technique: errResult.technique,
+            leakType: leak.type,
+            url: errResult.url,
+            status: errResult.status,
+            evidence: leak.evidence.slice(0, 300),
+            analysisType: 'live',
+          },
+        };
+
+        if (yieldDeduped(finding, emittedFingerprints)) {
+          yield finding;
+        }
+      }
+    }
+
+    // ── Phase 3j: Dependency CVE Findings ──────────────────────
+
+    if (jsBundleResult.dependencyCves) {
+      for (const cve of jsBundleResult.dependencyCves.cves) {
+        const finding: Finding = {
+          ruleId: 'spear-25/deployed-dependency-cve',
+          severity: cve.severity,
+          message:
+            `${cve.name} ${cve.version} deployed — ${cve.cveId} (${cve.description}, ` +
+            `CVSS ${cve.cvss}, fix: upgrade to ${cve.fixVersion})`,
+          cvss: cve.cvss,
+          mitreTechniques: ['T1190'],
+          confidence: 'confirmed',
+          remediation:
+            `Upgrade ${cve.name} to version ${cve.fixVersion} or later to fix ${cve.cveId}.`,
+          metadata: {
+            pluginId: 'endpoint-prober',
+            category: 'deployed_dependency_cve',
+            library: cve.name,
+            version: cve.version,
+            cveId: cve.cveId,
+            fixVersion: cve.fixVersion,
+            detectedIn: cve.detectedIn,
+            analysisType: 'live',
+          },
+        };
+
+        if (yieldDeduped(finding, emittedFingerprints)) {
+          yield finding;
+        }
+      }
+    }
+
+    // ── Phase 3k: Git Exposure Scanner ─────────────────────────
+
+    context.logger.info('Scanning for .git directory exposure');
+
+    const gitResult = await scanGitExposure({
+      baseUrl: context.liveAttack.targetUrl,
+      timeout: context.liveAttack.timeout ?? 5000,
+      logger: context.logger,
+    });
+
+    if (gitResult.exposed) {
+      const finding: Finding = {
+        ruleId: 'spear-25/git-exposed',
+        severity: 'critical',
+        message:
+          `.git directory EXPOSED: ${gitResult.evidence}`,
+        cvss: 9.8,
+        mitreTechniques: ['T1213'],
+        confidence: 'confirmed',
+        remediation:
+          'Block access to .git directory in your web server configuration. ' +
+          'Add a deny rule for /.git/ in nginx/Apache. ' +
+          'Full source code and commit history can be reconstructed from an exposed .git directory.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'git_exposed',
+          confirmedPaths: gitResult.paths.filter((p) => p.contentValid).map((p) => p.path),
+          gitConfig: gitResult.gitConfig,
+          analysisType: 'live',
+        },
+      };
+
+      if (yieldDeduped(finding, emittedFingerprints)) {
+        yield finding;
+      }
+    }
+
+    // Individual git path findings
+    for (const pathResult of gitResult.paths) {
+      if (pathResult.contentValid && pathResult.path === '/.git/config' && gitResult.gitConfig?.remoteUrl) {
+        const finding: Finding = {
+          ruleId: 'spear-25/git-config-leak',
+          severity: 'critical',
+          message:
+            `Git config exposes remote URL: ${gitResult.gitConfig.remoteUrl}` +
+            (gitResult.gitConfig.userEmail ? ` (committer: ${gitResult.gitConfig.userEmail})` : ''),
+          cvss: 9.1,
+          mitreTechniques: ['T1552'],
+          confidence: 'confirmed',
+          remediation:
+            'Block access to /.git/config immediately. The remote URL may contain credentials ' +
+            'and reveals the repository location.',
+          metadata: {
+            pluginId: 'endpoint-prober',
+            category: 'git_config_leak',
+            remoteUrl: gitResult.gitConfig.remoteUrl,
+            userEmail: gitResult.gitConfig.userEmail,
+            userName: gitResult.gitConfig.userName,
+            analysisType: 'live',
+          },
+        };
+
+        if (yieldDeduped(finding, emittedFingerprints)) {
+          yield finding;
+        }
+      }
+    }
+
+    // ── Phase 3l: Path Bruteforce + Admin Panel Scanner ─────────
+
+    context.logger.info('Starting path bruteforce', {
+      wordlistSize: getWordlistSize(),
+    });
+
+    const bruteforceResults = await bruteforcePaths({
+      baseUrl: context.liveAttack.targetUrl,
+      baseline,
+      timeout: context.liveAttack.timeout ?? 5000,
+      concurrency: 10,
+      logger: context.logger,
+    });
+
+    // Deep-analyze discovered paths
+    const adminScanResult = analyzeDiscoveredPaths(bruteforceResults, context.logger);
+
+    // Admin panels
+    for (const panel of adminScanResult.adminPanels) {
+      const finding: Finding = {
+        ruleId: 'spear-25/admin-panel-exposed',
+        severity: panel.severity,
+        message:
+          `Admin panel exposed: ${panel.technology} at ${panel.url}` +
+          (panel.authenticated ? '' : ' — NO authentication required'),
+        cvss: panel.authenticated ? 6.5 : 9.1,
+        mitreTechniques: ['T1190'],
+        confidence: 'confirmed',
+        remediation:
+          `Restrict access to admin panel (${panel.technology}). ` +
+          'Use IP whitelisting, VPN-only access, or remove from production deployment.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'admin_panel_exposed',
+          technology: panel.technology,
+          authenticated: panel.authenticated,
+          evidence: panel.evidence,
+          analysisType: 'live',
+        },
+      };
+
+      if (yieldDeduped(finding, emittedFingerprints)) {
+        yield finding;
+      }
+    }
+
+    // API documentation
+    for (const doc of adminScanResult.apiDocs) {
+      const finding: Finding = {
+        ruleId: 'spear-25/api-docs-exposed',
+        severity: doc.severity,
+        message: `API documentation exposed: ${doc.type} at ${doc.url}`,
+        cvss: 7.5,
+        mitreTechniques: ['T1592'],
+        confidence: 'confirmed',
+        remediation:
+          'Remove API documentation from production deployment or restrict access.',
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'api_docs_exposed',
+          type: doc.type,
+          evidence: doc.evidence,
+          analysisType: 'live',
+        },
+      };
+
+      if (yieldDeduped(finding, emittedFingerprints)) {
+        yield finding;
+      }
+    }
+
+    // Debug endpoints from deep analysis
+    for (const debug of adminScanResult.debugEndpoints) {
+      const finding: Finding = {
+        ruleId: 'spear-25/debug-endpoint-exposed',
+        severity: debug.severity,
+        message:
+          `Debug endpoint exposed: ${debug.type} at ${debug.url}` +
+          (debug.leaksInfo ? ' — leaks sensitive information' : ''),
+        cvss: debug.leaksInfo ? 9.1 : 6.5,
+        mitreTechniques: ['T1592'],
+        confidence: 'confirmed',
+        remediation:
+          `Remove ${debug.type} from production deployment. Debug endpoints leak internal state.`,
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'debug_endpoint_exposed',
+          type: debug.type,
+          leaksInfo: debug.leaksInfo,
+          evidence: debug.evidence,
+          analysisType: 'live',
+        },
+      };
+
+      if (yieldDeduped(finding, emittedFingerprints)) {
+        yield finding;
+      }
+    }
+
+    // Database UIs
+    for (const dbUI of adminScanResult.databaseUIs) {
+      const finding: Finding = {
+        ruleId: 'spear-25/database-ui-exposed',
+        severity: 'critical',
+        message:
+          `Database management UI exposed: ${dbUI.technology} at ${dbUI.url}` +
+          (dbUI.authenticated ? '' : ' — NO authentication'),
+        cvss: 9.8,
+        mitreTechniques: ['T1190'],
+        confidence: 'confirmed',
+        remediation:
+          `Remove ${dbUI.technology} from production or restrict access to internal network only.`,
+        metadata: {
+          pluginId: 'endpoint-prober',
+          category: 'database_ui_exposed',
+          technology: dbUI.technology,
+          authenticated: dbUI.authenticated,
+          evidence: dbUI.evidence,
+          analysisType: 'live',
+        },
+      };
+
+      if (yieldDeduped(finding, emittedFingerprints)) {
+        yield finding;
+      }
+    }
+
+    // Remaining bruteforce hits not classified by deep analysis
+    for (const bf of bruteforceResults) {
+      // Skip paths already covered by deep analysis
+      if (['admin', 'api_docs', 'debug', 'database'].includes(bf.category)) continue;
+
+      // Config files and backup files are always interesting
+      if (['config', 'backup', 'git', 'cicd'].includes(bf.category)) {
+        const severity: Severity = bf.category === 'backup' || bf.category === 'config' ? 'high' : 'medium';
+        const finding: Finding = {
+          ruleId: `spear-25/sensitive-path-${bf.category}`,
+          severity,
+          message: `Sensitive file accessible: ${bf.description} at ${bf.path} (status ${bf.status})`,
+          cvss: severity === 'high' ? 7.5 : 5.3,
+          mitreTechniques: ['T1592'],
+          confidence: 'confirmed',
+          remediation:
+            `Block access to ${bf.path} in production. Sensitive files should not be publicly accessible.`,
+          metadata: {
+            pluginId: 'endpoint-prober',
+            category: `sensitive_path_${bf.category}`,
+            path: bf.path,
+            status: bf.status,
+            bodySize: bf.bodySize,
+            contentType: bf.contentType,
+            analysisType: 'live',
+          },
+        };
+
+        if (yieldDeduped(finding, emittedFingerprints)) {
+          yield finding;
+        }
+      }
+    }
+
+    // ── Phase 4: Endpoint Probing with Baseline Filter ──────────
+
+    const probeEngine = new ProbeEngine(context.liveAttack, context.logger, baseline);
 
     // Build the list of endpoints to probe
     const endpointsToProbe = buildProbeList(
@@ -687,14 +1141,17 @@ export class EndpointProberPlugin implements SpearPlugin {
 
       // Yield findings based on probe results
       for (const finding of analyzeProbeResult(result, context)) {
-        liveFindingsCount++;
-        yield finding;
+        if (yieldDeduped(finding, emittedFingerprints)) {
+          liveFindingsCount++;
+          yield finding;
+        }
       }
     }
 
     context.logger.info('Live probing complete', {
       endpointsProbed: probedCount,
       liveFindings: liveFindingsCount,
+      totalDeduped: emittedFingerprints.size,
     });
   }
 
@@ -767,6 +1224,7 @@ function* analyzeProbeResult(
       line: endpoint.line,
       cvss: 9.1,
       mitreTechniques: ['T1190'],
+      confidence: 'confirmed',
       remediation:
         'Add authentication middleware to this endpoint. ' +
         'Ensure all requests are validated for proper credentials before processing.',
@@ -808,6 +1266,7 @@ function* analyzeProbeResult(
       line: endpoint.line,
       cvss: 9.1,
       mitreTechniques: ['T1190'],
+      confidence: 'confirmed',
       remediation:
         'Ensure the authentication middleware validates token signatures and claims. ' +
         'Invalid or malformed tokens must be rejected with 401.',
@@ -886,6 +1345,7 @@ function* analyzeProbeResult(
       line: endpoint.line,
       cvss: 5.3,
       mitreTechniques: ['T1189'],
+      confidence: 'confirmed',
       remediation:
         'Restrict Access-Control-Allow-Origin to specific trusted domains. ' +
         'Never use wildcard (*) with Access-Control-Allow-Credentials: true.',
@@ -917,6 +1377,7 @@ function* analyzeProbeResult(
       line: endpoint.line,
       cvss: 4.3,
       mitreTechniques: ['T1498'],
+      confidence: 'medium',
       remediation:
         'Implement rate limiting on this endpoint to prevent brute-force attacks and abuse. ' +
         'Consider using a reverse proxy or API gateway for rate limiting.',
@@ -1067,6 +1528,34 @@ function buildProbeList(
   }
 
   return result;
+}
+
+// ─── Dedup Helpers ──────────────────────────────────────────────
+
+/**
+ * Compute a fingerprint ID for deduplication.
+ * fingerprintId = SHA256(ruleId + category + evidence).slice(0, 16)
+ */
+function computeFingerprintId(finding: Finding): string {
+  const category = (finding.metadata as Record<string, unknown>)?.category as string ?? '';
+  const evidence = (finding.metadata as Record<string, unknown>)?.evidence as string ?? finding.message;
+  const input = `${finding.ruleId}:${category}:${evidence}`;
+  return createHash('sha256').update(input, 'utf8').digest('hex').slice(0, 16);
+}
+
+/**
+ * Check if a finding should be yielded (not a duplicate).
+ * If it's new, adds the fingerprint to the set and sets fingerprintId on the finding.
+ * Returns true if the finding should be yielded.
+ */
+function yieldDeduped(finding: Finding, emittedFingerprints: Set<string>): boolean {
+  const fpId = computeFingerprintId(finding);
+  if (emittedFingerprints.has(fpId)) {
+    return false;
+  }
+  emittedFingerprints.add(fpId);
+  finding.fingerprintId = fpId;
+  return true;
 }
 
 // ─── Default Export ───────────────────────────────────────────

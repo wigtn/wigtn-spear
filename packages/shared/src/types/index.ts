@@ -49,6 +49,10 @@ export interface Finding {
   mitreTechniques?: string[];
   remediation?: string;
   metadata?: Record<string, unknown>;
+  /** Confidence level: confirmed (live-verified), high, medium, low */
+  confidence?: 'confirmed' | 'high' | 'medium' | 'low';
+  /** Deduplication fingerprint: SHA256(ruleId + category + evidence).slice(0,16) */
+  fingerprintId?: string;
 }
 
 // ─── Verification Result ────────────────────────────────────
@@ -98,6 +102,16 @@ export interface LiveAttackOptions {
   maxRequests?: number;
   concurrency?: number;
   endpoints?: LiveEndpoint[];
+  /** LLM API key for multi-turn attacks and LLM-as-judge evaluation */
+  judgeApiKey?: string;
+  /** LLM model for attack generation and judging (default: gpt-4o-mini) */
+  judgeModel?: string;
+  /** LLM provider for judge (default: openai) */
+  judgeProvider?: 'openai' | 'anthropic' | 'google';
+  /** Enable multi-turn attack strategies (Crescendo, TAP) */
+  multiTurn?: boolean;
+  /** Multi-turn strategy (default: both) */
+  multiTurnStrategy?: 'crescendo' | 'tap' | 'both';
 }
 
 export interface LiveEndpoint {
@@ -124,6 +138,21 @@ export interface PluginContext {
   config: SpearConfig;
   logger: SpearLogger;
   liveAttack?: LiveAttackOptions;
+  /** Secret verifier instance for live credential validation (aggressive mode) */
+  secretVerifier?: SecretVerifierInterface;
+}
+
+/** Minimal interface for secret verification (avoids direct @wigtn/core dependency in shared) */
+export interface SecretVerifierInterface {
+  verify(secret: string): Promise<{
+    secret: string;
+    service: string;
+    verified: boolean;
+    active: boolean;
+    permissions?: string[];
+    identity?: string;
+    error?: string;
+  }>;
 }
 
 // ─── SpearPlugin Interface ──────────────────────────────────

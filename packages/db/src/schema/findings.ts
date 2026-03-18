@@ -58,6 +58,12 @@ export const findings = sqliteTable(
     /** JSON object with module-specific extra data */
     metadata: text('metadata'),
 
+    /** Confidence level: confirmed, high, medium, low */
+    confidence: text('confidence'),
+
+    /** Deduplication fingerprint: SHA256(ruleId + category + evidence).slice(0,16) */
+    fingerprintId: text('fingerprint_id'),
+
     createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
   },
   (table) => ({

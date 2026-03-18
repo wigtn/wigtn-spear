@@ -21,6 +21,7 @@
  */
 
 import type { SpearLogger } from '@wigtn/shared';
+import { randomBytes } from 'node:crypto';
 import { WsAttackClient, detectWsPreset } from './ws-client.js';
 import type { WsPayloadResult } from './ws-client.js';
 
@@ -364,7 +365,7 @@ async function endRelaySession(
  */
 function generateCallId(): string {
   const ts = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 8);
+  const rand = randomBytes(6).toString('hex');
   return `spear-${ts}-${rand}`;
 }
 

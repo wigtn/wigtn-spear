@@ -54,6 +54,9 @@ import { WsAttackClient, isWebSocketUrl, detectWsPreset } from './ws-client.js';
 import { executeRelayChain } from './relay-chain.js';
 import type { RelayChainConfig, RelayAttackResult } from './relay-chain.js';
 import { analyzeResponse, analyzeErrorResponse, type AnalysisResult } from './response-analyzer.js';
+import { createJudgeFromConfig, type LLMJudge, type JudgeResult } from './llm-judge.js';
+import { runMultiTurnAttacks, type MultiTurnResult } from './multi-turn-engine.js';
+import { fingerprintModel, type FingerprintResult } from './model-fingerprint.js';
 
 // ─── Constants ──────────────────────────────────────────────
 
@@ -176,6 +179,17 @@ const metadata: PluginMetadata = {
 /** Sleep for a given number of milliseconds. */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Redact sensitive values (Bearer tokens, API keys) from metadata strings. */
+function sanitizeForMetadata(text: string): string {
+  return text
+    .replace(/Bearer\s+[A-Za-z0-9_\-./+=]{8,}/gi, 'Bearer [REDACTED]')
+    .replace(/sk-[a-zA-Z0-9_-]{8,}/g, 'sk-[REDACTED]')
+    .replace(/sk-proj-[a-zA-Z0-9_-]{8,}/g, 'sk-proj-[REDACTED]')
+    .replace(/sk-ant-[a-zA-Z0-9_-]{8,}/g, 'sk-ant-[REDACTED]')
+    .replace(/key[=:]\s*["']?[A-Za-z0-9_\-./+=]{16,}/gi, 'key=[REDACTED]')
+    .replace(/api[_-]?key[=:]\s*["']?[A-Za-z0-9_\-./+=]{16,}/gi, 'api_key=[REDACTED]');
 }
 
 /** Check whether a file path has a scannable extension. */
@@ -316,7 +330,7 @@ function buildLiveFinding(
       payloadId: payload.id,
       request: {
         url: requestUrl,
-        body: requestBody.slice(0, 2000),
+        body: sanitizeForMetadata(requestBody).slice(0, 2000),
       },
       response: {
         status: responseStatus,
@@ -386,6 +400,27 @@ class LivePromptInjectPlugin implements SpearPlugin {
         yield* this.runRelayChainAttack(context);
       } else {
         yield* this.runLiveAttack(context);
+      }
+
+      // ── Advanced Modes (require --judge-key) ──────────────
+
+      const liveAttack = context.liveAttack!;
+      const judge = createJudgeFromConfig({
+        judgeApiKey: liveAttack.judgeApiKey,
+        judgeModel: liveAttack.judgeModel,
+        judgeProvider: liveAttack.judgeProvider,
+        timeout: liveAttack.timeout,
+        logger: context.logger,
+      });
+
+      if (judge) {
+        // Multi-turn attacks (Crescendo + TAP)
+        if (liveAttack.multiTurn) {
+          yield* this.runMultiTurnAttacks(context, judge);
+        }
+
+        // Model fingerprinting / distillation detection
+        yield* this.runModelFingerprint(context);
       }
     } else {
       yield* this.runStaticScan(target, context);
@@ -832,6 +867,146 @@ class LivePromptInjectPlugin implements SpearPlugin {
       totalDurationMs: chainResult.totalDurationMs,
     });
   }
+
+  // ─── Multi-Turn Attack Mode ─────────────────────────────────
+
+  /**
+   * Run multi-turn attack strategies (Crescendo + TAP).
+   * Requires --judge-key flag for LLM-based attack generation and judging.
+   */
+  private async *runMultiTurnAttacks(
+    context: PluginContext,
+    judge: LLMJudge,
+  ): AsyncGenerator<Finding> {
+    const liveAttack = context.liveAttack!;
+    const strategy = liveAttack.multiTurnStrategy ?? 'both';
+
+    context.logger.info('spear-23: starting multi-turn attacks', {
+      strategy,
+      targetUrl: liveAttack.targetUrl,
+    });
+
+    let totalResults = 0;
+    let successCount = 0;
+
+    for await (const result of runMultiTurnAttacks({
+      targetUrl: liveAttack.targetUrl,
+      targetApiKey: liveAttack.apiKey,
+      targetHeaders: liveAttack.headers,
+      targetTimeout: liveAttack.timeout,
+      judge,
+      strategy,
+      logger: context.logger,
+    })) {
+      totalResults++;
+
+      if (result.judgeResult.success) {
+        successCount++;
+
+        yield {
+          ruleId: `spear-23/multi-turn-${result.strategy}/${result.objectiveId}`,
+          severity: result.judgeResult.severity === 'info' ? 'high' : result.judgeResult.severity,
+          message:
+            `Multi-turn ${result.strategy} attack succeeded: ${result.objective} ` +
+            `(${result.turns.length} turns, confidence: ${result.judgeResult.confidence.toFixed(2)})`,
+          cvss: 9.1,
+          mitreTechniques: ['AML.T0051'],
+          confidence: result.judgeResult.confidence >= 0.8 ? 'confirmed' : 'high',
+          remediation:
+            `Target is vulnerable to ${result.strategy} multi-turn attacks. ` +
+            'Implement conversation-level safety monitoring, not just per-message filtering. ' +
+            'Consider tracking conversation context and detecting escalation patterns.',
+          metadata: {
+            pluginId: 'live-prompt-inject',
+            category: `multi_turn_${result.strategy}`,
+            strategy: result.strategy,
+            objectiveId: result.objectiveId,
+            objective: result.objective,
+            turnCount: result.turns.length,
+            judgeCategory: result.judgeResult.category,
+            judgeEvidence: result.judgeResult.evidence,
+            judgeConfidence: result.judgeResult.confidence,
+            apiCalls: result.apiCalls,
+            durationMs: result.durationMs,
+            analysisType: 'live',
+          },
+        };
+      }
+    }
+
+    context.logger.info('spear-23: multi-turn attacks complete', {
+      totalObjectives: totalResults,
+      succeeded: successCount,
+    });
+  }
+
+  // ─── Model Fingerprinting ──────────────────────────────────
+
+  /**
+   * Fingerprint the target LLM to detect model downgrade/distillation.
+   */
+  private async *runModelFingerprint(
+    context: PluginContext,
+  ): AsyncGenerator<Finding> {
+    const liveAttack = context.liveAttack!;
+
+    context.logger.info('spear-23: starting model fingerprint');
+
+    const result = await fingerprintModel({
+      targetUrl: liveAttack.targetUrl,
+      apiKey: liveAttack.apiKey,
+      headers: liveAttack.headers,
+      timeout: liveAttack.timeout,
+      claimedModel: liveAttack.judgeModel, // Use judge model as reference for claimed model
+      logger: context.logger,
+    });
+
+    if (result.downgradeDetected) {
+      yield {
+        ruleId: 'spear-23/model-downgrade',
+        severity: 'high',
+        message:
+          `Model downgrade detected: ${result.evidence}`,
+        cvss: 7.5,
+        mitreTechniques: ['AML.T0047'],
+        confidence: result.confidence >= 0.7 ? 'high' : 'medium',
+        remediation:
+          'Verify the model being served matches the advertised model. ' +
+          'Model distillation or downgrade can reduce safety alignment and output quality.',
+        metadata: {
+          pluginId: 'live-prompt-inject',
+          category: 'model_downgrade',
+          detectedModel: result.detectedModel,
+          claimedModel: result.claimedModel,
+          confidence: result.confidence,
+          signatureScores: result.signatureScores.slice(0, 3),
+          probeCount: result.probeResults.length,
+          analysisType: 'live',
+        },
+      };
+    }
+
+    // Always emit informational fingerprint finding
+    yield {
+      ruleId: 'spear-23/model-fingerprint',
+      severity: 'info',
+      message: `Model fingerprint: detected ${result.detectedModel} (confidence: ${result.confidence.toFixed(2)})`,
+      metadata: {
+        pluginId: 'live-prompt-inject',
+        category: 'model_fingerprint',
+        detectedModel: result.detectedModel,
+        claimedModel: result.claimedModel,
+        confidence: result.confidence,
+        topSignatures: result.signatureScores.slice(0, 5),
+        analysisType: 'live',
+      },
+    };
+
+    context.logger.info('spear-23: model fingerprint complete', {
+      detected: result.detectedModel,
+      downgrade: result.downgradeDetected,
+    });
+  }
 }
 
 // ─── Default Export ─────────────────────────────────────────
@@ -850,3 +1025,9 @@ export { analyzeResponse, analyzeErrorResponse } from './response-analyzer.js';
 export type { AnalysisResult } from './response-analyzer.js';
 export { executeRelayChain } from './relay-chain.js';
 export type { RelayChainConfig, RelayAttackResult, RelaySessionInfo } from './relay-chain.js';
+export { LLMJudge, createJudgeFromConfig } from './llm-judge.js';
+export type { JudgeConfig, JudgeResult } from './llm-judge.js';
+export { runMultiTurnAttacks } from './multi-turn-engine.js';
+export type { MultiTurnConfig, MultiTurnResult } from './multi-turn-engine.js';
+export { fingerprintModel } from './model-fingerprint.js';
+export type { FingerprintConfig, FingerprintResult } from './model-fingerprint.js';

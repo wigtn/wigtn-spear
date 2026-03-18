@@ -107,6 +107,11 @@ spear attack <target>
 | `--verbose` | `-v` | boolean | false | Verbose logging |
 | `--source-dir` | | string | `.` | Source directory for hybrid mode |
 | `--header` | `-H` | string[] | | Custom headers (`"Key: Value"`) |
+| `--judge-key` | | string | | LLM API key for multi-turn attacks and LLM-as-judge (env: `SPEAR_JUDGE_API_KEY`) |
+| `--judge-model` | | string | gpt-4o-mini | LLM model for judge/attacker |
+| `--judge-provider` | | string | openai | LLM provider (`openai`, `anthropic`, `google`) |
+| `--multi-turn` | | boolean | false | Enable multi-turn attack strategies (Crescendo + TAP) |
+| `--multi-turn-strategy` | | string | both | Multi-turn strategy (`crescendo`, `tap`, `both`) |
 
 ### Available Modules
 
@@ -172,7 +177,7 @@ spear attack https://target.com --source-dir ./repo -v
 
 ### Endpoint Prober Phases (Spear-25)
 
-`--module endpoint-prober` 실행 시 6단계 스캔:
+`--module endpoint-prober` 실행 시 8단계 스캔:
 
 | Phase | Name | Description |
 |-------|------|-------------|
@@ -181,7 +186,86 @@ spear attack https://target.com --source-dir ./repo -v
 | 3a | OpenAPI Scan | Swagger/OpenAPI 스펙 자동 발견 |
 | 3b | AI Infra Scan | MLflow, Qdrant, Chroma 등 AI 인프라 스캔 |
 | 3c | Debug Scan | `/actuator`, `/.env`, `/debug/pprof` 등 |
-| 4 | Auth Probe | 엔드포인트별 인증 우회 테스트 |
+| 3e | JS Bundle Analysis | HTML에서 `<script>` 추출 → JS 다운로드 → 시크릿 스캔 + Sourcemap 프로빙 |
+| 3f | HTTP Header Analysis | 보안 헤더 7종 검사 (CSP, HSTS, X-Frame-Options 등) |
+| 3i | Error Provocation | 8가지 기법으로 에러 유도 → 스택 트레이스/내부 IP 노출 탐지 |
+| 3k | Git Exposure Scan | `.git` 디렉토리 노출 확인 (8개 경로, 컨텐츠 검증) |
+| 3l | Path Bruteforce | 120+ 민감 경로 프로빙 (admin, API docs, config, backup 등) |
+| 3l+ | Admin Panel Analysis | 발견된 경로 딥 분석 (WordPress, Django, phpMyAdmin 등) |
+| 4 | Auth Probe | 엔드포인트별 인증 우회 테스트 (10가지 bypass 기법) |
+
+### JS Bundle Analyzer (Phase 5)
+
+배포된 JS 번들에서 하드코딩된 크리덴셜을 추출하고 Sourcemap 노출을 탐지한다.
+**소스코드 없이 URL만으로 동작** — SPEAR의 핵심 차별점.
+
+**동작 방식:**
+1. 타겟 URL의 HTML 파싱 → `<script src>` 태그 추출
+2. JS 파일 다운로드 (인라인 스크립트 포함)
+3. 35개 시크릿 패턴으로 크리덴셜 스캔
+4. JS 내 `sourceMappingURL` 참조에서 .map 파일 프로빙
+5. 공통 경로 Sourcemap 프로빙 (`/main.js.map`, `/bundle.js.map` 등)
+6. 내부 URL/API 엔드포인트 추출
+
+**시크릿 탐지 패턴 (35개):**
+
+| Category | Patterns | Examples |
+|----------|----------|---------|
+| **Global (20개)** | | |
+| OpenAI | `sk-`, `sk-proj-` | API Key |
+| Anthropic | `sk-ant-` | API Key |
+| AWS | `AKIA`, secret key | Access Key ID + Secret |
+| Google | `AIza`, OAuth Client ID | Maps, Firebase, Cloud |
+| Stripe | `sk_live_`, `pk_live_` | Payment Key |
+| Firebase | `apiKey`, JWT | Config 객체 |
+| Supabase | `eyJ` JWT, `anon`/`service_role` key | Supabase Config |
+| GitHub | `ghp_`, `gho_`, `ghs_` | Personal/OAuth/App Token |
+| Slack | `xoxb-`, `xoxp-`, `xoxs-` | Bot/User/Session Token |
+| Generic | `Bearer`, `private_key`, `password=` | 하드코딩된 인증정보 |
+| **한국 서비스 (15개)** | | |
+| Kakao | JS Key, REST Key, Admin Key, Token | 32자 hex (`f417ea...`) |
+| Naver | Maps Client ID, Client ID/Secret | `ncpClientId`, `X-Naver-Client-Id` |
+| Toss Payments | `live_ck_`, `live_sk_` | Client/Secret Key |
+| PortOne (아임포트) | `imp_` merchant ID, `store-` UUID | 결제 연동 |
+| NHN Cloud | App Key (32자) | Toast API |
+| Channel Talk | Plugin Key (UUID) | 채팅 연동 |
+| Sentry | DSN URL | 에러 트래킹 |
+| JSX Generic | `clientId`, `appId`, `appKey` props | React 컴포넌트 하드코딩 |
+
+**한국 서비스 API 엔드포인트 탐지:**
+
+| Service | Pattern |
+|---------|---------|
+| Kakao | `kapi.kakao.com`, `kauth.kakao.com` |
+| Naver | `openapi.naver.com`, `openapi.map.naver.com` |
+| Toss | `api.tosspayments.com` |
+| PortOne | `api.iamport.kr` |
+
+**Sourcemap 프로빙 경로:**
+
+| Type | Paths |
+|------|-------|
+| From JS reference | `sourceMappingURL` 주석에서 추출 |
+| CRA (React) | `/static/js/main.js.map`, `/static/js/bundle.js.map` |
+| Next.js | `/_next/static/chunks/main.js.map`, `/_next/static/chunks/app.js.map` |
+| Vite | `/assets/index.js.map` |
+| Generic | `/main.js.map`, `/bundle.js.map`, `/app.js.map` |
+
+### HTTP Header Analyzer (Phase 6)
+
+HTTP 응답 헤더에서 보안 관련 헤더의 존재 여부와 설정을 검사한다.
+
+**검사 항목:**
+
+| Header | Severity | Impact |
+|--------|----------|--------|
+| `Content-Security-Policy` | HIGH | XSS, 코드 인젝션 방지 |
+| `Strict-Transport-Security` | HIGH | SSL stripping 방지 |
+| `X-Content-Type-Options` | MEDIUM | MIME sniffing 방지 |
+| `X-Frame-Options` | MEDIUM | Clickjacking 방지 |
+| `Referrer-Policy` | LOW | Referrer 정보 노출 제어 |
+| `Permissions-Policy` | LOW | 브라우저 기능 접근 제어 |
+| `X-XSS-Protection` | LOW | 구형 브라우저 XSS 필터 |
 
 ---
 

@@ -20,6 +20,8 @@
  */
 
 import type { SpearLogger } from '@wigtn/shared';
+import { matchesBaseline } from './baseline-fingerprinter.js';
+import type { BaselineFingerprint } from './baseline-fingerprinter.js';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -58,6 +60,8 @@ export interface DebugScanConfig {
   baseUrl: string;
   timeout?: number;
   logger?: SpearLogger;
+  /** Baseline fingerprint for FP elimination (catch-all filter) */
+  baseline?: BaselineFingerprint | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────
@@ -162,9 +166,11 @@ export async function scanDebugEndpoints(
   const endpoints: DiscoveredDebugEndpoint[] = [];
   let totalProbed = 0;
 
+  const baseline = config.baseline;
+
   for (const target of DEBUG_ENDPOINTS) {
     const url = baseUrl + target.path;
-    const result = await probeDebugEndpoint(url, target, timeout);
+    const result = await probeDebugEndpoint(url, target, timeout, baseline);
     totalProbed++;
 
     if (result) {
@@ -203,6 +209,7 @@ async function probeDebugEndpoint(
   url: string,
   target: DebugProbeTarget,
   timeout: number,
+  baseline?: BaselineFingerprint | null,
 ): Promise<DiscoveredDebugEndpoint | null> {
   const start = performance.now();
 
@@ -232,6 +239,9 @@ async function probeDebugEndpoint(
     // Skip 404s and redirects to login
     if (response.status === 404) return null;
     if (response.status >= 300 && response.status < 400) return null;
+
+    // Baseline FP filter: if response matches the catch-all baseline, skip
+    if (matchesBaseline(baseline, response.status, bodyText)) return null;
 
     // Confirm pattern if specified
     if (target.confirmPattern && !bodyText.includes(target.confirmPattern)) {
