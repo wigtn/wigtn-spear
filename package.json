@@ -23,5 +23,26 @@
   "packageManager": "pnpm@8.15.0",
   "engines": {
     "node": ">=20.0.0"
+  },
+  "homepage": "https://wigtn.com",
+  "bugs": {
+    "url": "https://github.com/wigtn/wigtn-spear/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wigtn/wigtn-spear.git"
+  },
+  "keywords": [
+    "wigtn",
+    "ai-native",
+    "security",
+    "scanner",
+    "owasp",
+    "llm-security",
+    "penetration-testing"
+  ],
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/wigtn"
   }
 }

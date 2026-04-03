@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - name: "WIGTN Crew"
+    website: "https://wigtn.com"
+repository-code: "https://github.com/wigtn/wigtn-spear"
+url: "https://wigtn.com"
+abstract: "WIGTN-SPEAR — AI Service Security Scanner. Offensive security testing for the age of vibe coding. Finds security vulnerabilities in AI-powered services that traditional scanners miss. Covers OWASP Top 10 for LLM Applications and Web Applications."
+keywords:
+  - ai-native
+  - wigtn
+  - korea
+  - security
+  - owasp
+  - llm-security
+  - penetration-testing
+license: MIT
