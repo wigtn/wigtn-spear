@@ -2,7 +2,7 @@
   "name": "wigtn-spear",
   "version": "0.1.0",
   "private": true,
-  "description": "WIGTN-SPEAR: Offensive Security Testing Tool for AI/MCP Era",
+  "description": "WIGTN-SPEAR: AI Red Team Arena Tool — Adversarial testing of AI agents in safety-critical domains",
   "author": "WIGTN Hackathon Team 2",
   "license": "MIT",
   "scripts": {
@@ -35,8 +35,11 @@
   "keywords": [
     "wigtn",
     "ai-native",
+    "red-team",
+    "ai-safety",
+    "judgement-day",
+    "adversarial-testing",
     "security",
-    "scanner",
     "owasp",
     "llm-security",
     "penetration-testing"
