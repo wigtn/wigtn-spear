@@ -110,6 +110,15 @@ importers:
       '@wigtn/spear-25-endpoint-prober':
         specifier: workspace:*
         version: link:../../packages/plugins/spear-25-endpoint-prober
+      '@wigtn/spear-26-scenario-engine':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-26-scenario-engine
+      '@wigtn/spear-27-authority-spoof':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-27-authority-spoof
+      '@wigtn/spear-28-multimodal-craft':
+        specifier: workspace:*
+        version: link:../../packages/plugins/spear-28-multimodal-craft
       '@wigtn/tui':
         specifier: workspace:*
         version: link:../../packages/tui
@@ -552,6 +561,54 @@ importers:
       '@wigtn/core':
         specifier: workspace:*
         version: link:../../core
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/plugins/spear-26-scenario-engine:
+    dependencies:
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@wigtn/spear-27-authority-spoof':
+        specifier: workspace:*
+        version: link:../spear-27-authority-spoof
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.37)
+
+  packages/plugins/spear-27-authority-spoof:
+    dependencies:
+      '@wigtn/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.37
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.37)
+
+  packages/plugins/spear-28-multimodal-craft:
+    dependencies:
       '@wigtn/shared':
         specifier: workspace:*
         version: link:../../shared

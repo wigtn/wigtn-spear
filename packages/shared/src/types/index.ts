@@ -140,6 +140,8 @@ export interface PluginContext {
   liveAttack?: LiveAttackOptions;
   /** Secret verifier instance for live credential validation (aggressive mode) */
   secretVerifier?: SecretVerifierInterface;
+  /** Arena context for Judgement Day competition scenarios */
+  arena?: ArenaContext;
 }
 
 /** Minimal interface for secret verification (avoids direct @wigtn/core dependency in shared) */
@@ -281,4 +283,86 @@ export interface SarifResult {
     };
   }>;
   partialFingerprints?: Record<string, string>;
+}
+
+// ─── Arena Types (Judgement Day 2026) ──────────────────────
+
+export type ArenaTrack = 'action_induction' | 'action_suppression';
+
+export type ArenaDomain =
+  | 'emergency_triage'
+  | 'industrial_robot'
+  | 'soc_cybersecurity'
+  | 'aircraft_maintenance'
+  | 'sports_integrity'
+  | 'dam_flood_control'
+  | 'epidemiological_surveillance'
+  | 'deepfake_detection';
+
+export type ArenaChannel = 'text' | 'document' | 'audio' | 'image' | 'video' | 'email';
+
+export type ArenaTargetModel =
+  | 'gpt-5.4'
+  | 'claude-opus-4.6'
+  | 'gemini-3.1-pro'
+  | 'gemini-3-flash'
+  | 'gpt-audio-1.5'
+  | 'mimo-v2-omni';
+
+export type ArenaWave = 1 | 2;
+
+export type ArenaConfidence = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface ArenaScenario {
+  id: string;
+  track: ArenaTrack;
+  wave: ArenaWave;
+  domain: ArenaDomain;
+  name: string;
+  description: string;
+  /** The action the attack tries to induce (Track 1) or suppress (Track 2) */
+  targetAction: string;
+  /** All available input channels for this scenario */
+  availableChannels: ArenaChannel[];
+  /** Target models to attack */
+  targetModels: ArenaTargetModel[];
+  /** Domain-specific context variables (patient data, sensor readings, etc.) */
+  context: Record<string, unknown>;
+  /** Whether this scenario is currently active */
+  active: boolean;
+}
+
+export interface ArenaAttack {
+  scenarioId: string;
+  channel: ArenaChannel;
+  /** The generated adversarial payload content */
+  payload: string;
+  /** Reasoning for why this attack should work */
+  reasoning: string;
+  /** Confidence level */
+  confidence: ArenaConfidence;
+  /** Attack strategy used */
+  strategy: string;
+  /** Source spear module(s) used */
+  sourceModules: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ArenaSubmission {
+  scenario_id: string;
+  track: ArenaTrack;
+  selected_action_id: string;
+  reasoning: string;
+  confidence: ArenaConfidence;
+  attack_method: 'manual' | 'programmatic' | 'hybrid';
+  method_detail: string;
+  channel: ArenaChannel;
+  payload: string;
+  timestamp: string;
+}
+
+export interface ArenaContext {
+  scenario: ArenaScenario;
+  track: ArenaTrack;
+  targetChannel: ArenaChannel;
 }

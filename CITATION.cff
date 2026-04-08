@@ -6,13 +6,16 @@ authors:
     website: "https://wigtn.com"
 repository-code: "https://github.com/wigtn/wigtn-spear"
 url: "https://wigtn.com"
-abstract: "WIGTN-SPEAR — AI Service Security Scanner. Offensive security testing for the age of vibe coding. Finds security vulnerabilities in AI-powered services that traditional scanners miss. Covers OWASP Top 10 for LLM Applications and Web Applications."
+abstract: "WIGTN-SPEAR — AI Red Team Arena Tool. Adversarial testing of AI agents in safety-critical domains for the Judgement Day 2026 competition. Built on 25 attack modules covering OWASP Top 10 for LLM and Web Applications."
 keywords:
   - ai-native
   - wigtn
   - korea
+  - red-team
+  - ai-safety
+  - judgement-day
+  - adversarial-testing
   - security
   - owasp
   - llm-security
-  - penetration-testing
 license: MIT

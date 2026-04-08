@@ -14,12 +14,12 @@
  *     without injection guards.
  *
  *   Aggressive mode with liveAttack:
- *     Sends 22 injection payloads across 8 categories to the target LLM
+ *     Sends 37 injection payloads across 13 categories to the target LLM
  *     endpoint. Analyzes responses using indicator-based matching and
  *     heuristic detection. Yields a Finding for each successful injection.
  *
  * Architecture:
- *   - payloads.ts:          22-payload library across 8 attack categories
+ *   - payloads.ts:          37-payload library across 13 attack categories
  *   - http-client.ts:       OpenAI-compatible HTTP client (built-in fetch)
  *   - response-analyzer.ts: Indicator matching + heuristic analysis engine
  *   - index.ts:             Plugin orchestration and Finding generation
@@ -161,9 +161,10 @@ const metadata: PluginMetadata = {
   author: 'WIGTN Team',
   description:
     'Sends actual prompt injection payloads to LLM endpoints and analyzes responses. ' +
-    `Includes ${PAYLOAD_COUNT} payloads across 8 categories: system prompt extraction, ` +
+    `Includes ${PAYLOAD_COUNT} payloads across 13 categories: system prompt extraction, ` +
     'instruction override, role hijack, output manipulation, data exfiltration, ' +
-    'encoding bypass, jailbreak, and context overflow.',
+    'encoding bypass, context overflow, misinformation, domain medical, domain aviation, ' +
+    'domain cybersecurity, authority override, and economic pressure.',
   severity: 'critical',
   tags: ['prompt-injection', 'llm', 'live-attack', 'ai-security'],
   references: ['OWASP-LLM01', 'CWE-77'],
