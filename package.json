@@ -1,51 +1,50 @@
 {
   "name": "wigtn-spear",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "WIGTN-SPEAR: AI Red Team Arena Tool — Adversarial testing of AI agents in safety-critical domains",
-  "author": "WIGTN Hackathon Team 2",
-  "license": "MIT",
+  "type": "module",
+  "description": "Evidence-driven security attack verification for AI agents and owned projects",
+  "bin": {
+    "spear": "./dist/src/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "test": "turbo run test",
-    "typecheck": "turbo run typecheck",
-    "lint": "turbo run lint",
-    "clean": "turbo run clean",
-    "db:generate": "turbo run db:generate --filter=@wigtn/db",
-    "db:migrate": "turbo run db:migrate --filter=@wigtn/db"
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "check": "npm run typecheck && npm test"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   },
   "devDependencies": {
-    "turbo": "^2.0.0",
-    "typescript": "^5.4.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.0"
   },
-  "packageManager": "pnpm@8.15.0",
-  "engines": {
-    "node": ">=20.0.0"
-  },
-  "homepage": "https://wigtn.com",
-  "bugs": {
-    "url": "https://github.com/wigtn/wigtn-spear/issues"
-  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/wigtn/wigtn-spear.git"
   },
   "keywords": [
-    "wigtn",
-    "ai-native",
+    "agent-security",
     "red-team",
-    "ai-safety",
-    "judgement-day",
-    "adversarial-testing",
-    "security",
-    "owasp",
-    "llm-security",
-    "penetration-testing"
+    "security-verification",
+    "mcp",
+    "owasp-aisvs",
+    "owasp-asvs"
   ],
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/wigtn"
+  "dependencies": {
+    "undici": "^8.8.0"
   }
 }

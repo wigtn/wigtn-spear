@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "3.0",
+  "kind": "pack-registry",
+  "registryId": "local-owned-packs",
+  "generatedAt": "2026-07-23T00:00:00.000Z",
+  "packs": [
+    {
+      "schemaVersion": "3.0",
+      "id": "http-authz",
+      "version": "1.0.0",
+      "apiVersion": "1.0",
+      "supportedTargetVersions": [
+        "*"
+      ],
+      "applicableProtocols": [
+        "http"
+      ],
+      "capabilities": [
+        "mutate:http"
+      ],
+      "safetyClass": "active-safe",
+      "requiredWitnesses": [
+        "http-response"
+      ],
+      "fixtures": [
+        "principal-a",
+        "principal-b"
+      ],
+      "mutationGrammar": "swap fixture-owned object identifiers",
+      "forbiddenPredicates": [
+        "cross-principal canary disclosure"
+      ],
+      "cleanup": "reset disposable fixture",
+      "standards": [
+        "OWASP API1:2023"
+      ]
+    }
+  ]
+}

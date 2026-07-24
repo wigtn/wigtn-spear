@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "3.0",
+  "kind": "target-profile",
+  "target": {
+    "name": "fixture-app",
+    "version": "1.0.0",
+    "buildDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "availableWitnesses": [
+    "http-response"
+  ],
+  "surfaces": [
+    {
+      "protocol": "http",
+      "entryPoint": "/api/admin/reindex",
+      "operation": "POST",
+      "principals": [
+        "authenticated"
+      ],
+      "dataClasses": [
+        "internal"
+      ],
+      "stateDependencies": [
+        "fixture-database"
+      ]
+    }
+  ]
+}

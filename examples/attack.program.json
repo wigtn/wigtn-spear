@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "3.0",
+  "kind": "attack-program",
+  "id": "bola-object-swap",
+  "title": "Cross-principal object identifier swap",
+  "principal": {
+    "id": "fixture-user-b",
+    "kind": "fixture-session"
+  },
+  "preconditions": [
+    "fixture-user-a owns an object containing a run-scoped canary"
+  ],
+  "carrier": {
+    "protocol": "http",
+    "entryPoint": "/api/items/{id}"
+  },
+  "source": {
+    "kind": "fixture",
+    "reference": "fixture-user-a-object-id"
+  },
+  "capability": "read:item",
+  "mutation": {
+    "kind": "identifier-swap",
+    "description": "request user A object using user B session"
+  },
+  "forbiddenPredicate": {
+    "kind": "data-flow",
+    "expression": "user A canary reaches user B response"
+  },
+  "oracle": {
+    "kind": "http-body",
+    "witness": "http-response"
+  }
+}
