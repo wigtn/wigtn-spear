@@ -160,6 +160,17 @@ export class HttpFixture implements StateController {
       return this.#json(res, 200, { id: item.id, owner: item.owner, canary: item.canary });
     }
 
+    // Differential authorization (S6/FR-507): an admin-only report with no
+    // per-principal marker. Vulnerable mode returns the identical report to any
+    // authenticated actor (broken function-level authz); fixed mode restricts it
+    // to `admin`. The only cross-principal signal is response equivalence.
+    if (req.method === 'GET' && url.pathname === '/admin/report') {
+      if (!this.vulnerable && actor !== 'admin') {
+        return this.#json(res, 403, { error: 'forbidden' });
+      }
+      return this.#json(res, 200, { report: 'fleet-wide-metrics', total: 42 });
+    }
+
     if (req.method === 'POST' && url.pathname === '/admin/reindex') {
       if (!this.vulnerable && actor !== 'admin') {
         return this.#json(res, 403, { error: 'forbidden' });

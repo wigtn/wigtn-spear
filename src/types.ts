@@ -377,6 +377,17 @@ export type CausalOracle =
     witness: string;
     committedPath: string;
     rolledBackPath: string;
+  }
+  | {
+    // Differential authorization (FR-507): two principals issue the equivalent
+    // operation. Forbidden when the unprivileged principal obtains a 2xx response
+    // identical to the privileged one — authorization failed to differentiate
+    // them. Detects BFLA/BOLA with no canary or state change to key on: the
+    // signal is purely that two principals received the same protected content.
+    kind: 'differential-access';
+    witness: 'http-gateway';
+    privilegedRequestId: string;
+    unprivilegedRequestId: string;
   };
 
 export interface HttpSequenceSpec {

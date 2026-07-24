@@ -538,6 +538,17 @@ export function validateCausalHttpAttackProgram(value: unknown): CausalHttpAttac
     requireString(oracle, 'committedPath', 'program.oracle');
     requireString(oracle, 'rolledBackPath', 'program.oracle');
     requireString(oracle, 'witness', 'program.oracle');
+  } else if (oracle.kind === 'differential-access') {
+    requireString(oracle, 'privilegedRequestId', 'program.oracle');
+    requireString(oracle, 'unprivilegedRequestId', 'program.oracle');
+    if (oracle.privilegedRequestId === oracle.unprivilegedRequestId) {
+      throw new SpearConfigError(
+        'differential-access oracle requires distinct privileged/unprivileged request IDs',
+      );
+    }
+    if (oracle.witness !== 'http-gateway') {
+      throw new SpearConfigError('differential-access oracle requires http-gateway witness');
+    }
   } else {
     throw new SpearConfigError(`Unsupported causal HTTP oracle: ${String(oracle.kind)}`);
   }

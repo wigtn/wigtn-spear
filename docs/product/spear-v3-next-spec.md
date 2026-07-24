@@ -258,6 +258,14 @@ changed, canary-egress).
 **테스트(AC-502·504)**: HTTP 200이어도 cross-tenant state 변화 검출(state-path-changed);
 actor만 바꾼 paired에서 differential. (AC-505는 FR-307 편입 후.)
 
+**구현 상태(2026-07-24)**: `state-path-changed`·`state-path-delta-exceeds`·`partial-effect`
+구현 완료. **`differential-access` 구현 완료** — paired 동시 실행 없이 한 attack sequence
+안에서 `asPrincipalId`로 privileged/unprivileged 두 요청을 발행하고 응답 동치를 판정한다
+(순차라 결정적, replay 안전). vulnerable/fixed `/admin/report` fixture로 proven/rejected 실증
+(`test/differential-oracle.test.ts`, AC-504/FR-507). `canary-egress`와 browser/DB audit
+witness(FR-506)는 미구현. S4 concurrency semaphore는 현재 sequence가 순차라 never-triggers여서
+가치 낮음 → paired race family 착수 시 함께.
+
 ---
 
 ## S7. Retention lifecycle — Privacy/retention, AC-802
