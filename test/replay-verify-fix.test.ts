@@ -195,3 +195,51 @@ test('replay and verify-fix CLI commands report the correct exit codes', async (
   }
   assert.ok(!JSON.parse(await readFile(files.proven, 'utf8')).run.baseline.beforeState);
 });
+
+test('evidence prune --if-expired is a no-op until the window elapses, then prunes', async () => {
+  const proven = await run(true);
+  const notDue = createEvidenceBundle(proven, bolaProgram(), SIGNING_KEY, new Date(), undefined, 3650);
+  const expired = createEvidenceBundle(proven, bolaProgram(), SIGNING_KEY, new Date('2020-01-01T00:00:00.000Z'), undefined, 1);
+
+  const directory = await mkdtemp(join(tmpdir(), 'spear-retention-'));
+  const files = {
+    notDue: join(directory, 'not-due.json'),
+    expired: join(directory, 'expired.json'),
+    trust: join(directory, 'trust.json'),
+    key: join(directory, 'evidence.pem'),
+    out: join(directory, 'out.json'),
+  };
+  await Promise.all([
+    writeFile(files.notDue, JSON.stringify(notDue)),
+    writeFile(files.expired, JSON.stringify(expired)),
+    writeFile(files.trust, JSON.stringify(EVIDENCE_TRUST)),
+    writeFile(files.key, EVIDENCE_KEYS.privateKeyPem),
+  ]);
+
+  const originalLog = console.log;
+  const originalErr = process.stderr.write.bind(process.stderr);
+  console.log = () => undefined;
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    // A bundle whose window has not elapsed is left at grade `full`.
+    const notDueCode = await main([
+      'evidence', 'prune', '--bundle', files.notDue, '--trust-store', files.trust,
+      '--evidence-private-key', files.key, '--evidence-key-id', EVIDENCE_KEY_ID,
+      '--if-expired', '--output', files.out,
+    ]);
+    assert.equal(notDueCode, 0);
+    assert.equal(JSON.parse(await readFile(files.out, 'utf8')).retention.grade, 'full');
+
+    // An elapsed window is pruned to `redacted-only`.
+    const expiredCode = await main([
+      'evidence', 'prune', '--bundle', files.expired, '--trust-store', files.trust,
+      '--evidence-private-key', files.key, '--evidence-key-id', EVIDENCE_KEY_ID,
+      '--if-expired', '--output', files.out,
+    ]);
+    assert.equal(expiredCode, 0);
+    assert.equal(JSON.parse(await readFile(files.out, 'utf8')).retention.grade, 'redacted-only');
+  } finally {
+    console.log = originalLog;
+    process.stderr.write = originalErr;
+  }
+});

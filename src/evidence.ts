@@ -141,13 +141,19 @@ function bundleContent(
   return clone as Omit<UnsignedEvidenceBundle, 'bundleDigest'>;
 }
 
+export const DEFAULT_RETENTION_DAYS = 30;
+
 export function createEvidenceBundle(
   run: CausalRunResult,
   program: CausalHttpAttackProgram,
   signingKey: EvidenceSigningKey,
   now = new Date(),
   minimizedGraphPath?: string[],
+  retentionDays = DEFAULT_RETENTION_DAYS,
 ): EvidenceBundle {
+  if (!Number.isFinite(retentionDays) || retentionDays <= 0) {
+    throw new SpearExecutionError('retentionDays must be a positive number');
+  }
   verifyReceiptChain(allEvents(run));
   const safeProgram = sanitizedProgram(program);
   const finding = findingFor(run, program, minimizedGraphPath);
@@ -180,9 +186,10 @@ export function createEvidenceBundle(
       { field: 'raw witness payloads', action: 'digested' },
     ],
     retention: {
-      // Redacted response bodies expire after 30 days; replay uses only the
-      // sealed predicate flags, so a pruned bundle still verifies and replays.
-      rawExpiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      // Redacted response bodies expire after the retention window; replay uses
+      // only the sealed predicate flags, so a pruned bundle still verifies and
+      // replays. `spear evidence prune --if-expired` enforces this window.
+      rawExpiresAt: new Date(now.getTime() + retentionDays * 24 * 60 * 60 * 1000).toISOString(),
       grade: 'full',
     },
   };
@@ -212,12 +219,24 @@ function sealBundle(
  * bundle still verifies and replays because replay uses the sealed predicate
  * flags, not the raw bodies. Finding ID and lineage are preserved.
  */
+/**
+ * Whether a bundle still holds raw (redactable) artifacts and its retention
+ * window has elapsed as of `now` — i.e. `prune --if-expired` should act.
+ */
+export function retentionDue(bundle: EvidenceBundle, now = new Date()): boolean {
+  return bundle.retention.grade === 'full'
+    && Date.parse(bundle.retention.rawExpiresAt) <= now.getTime();
+}
+
 export function pruneEvidenceBundle(
   value: unknown,
   trustStore: unknown,
   signingKey: EvidenceSigningKey,
 ): EvidenceBundle {
   const bundle = verifyEvidenceBundle(value, trustStore);
+  // Idempotent: a redacted-only bundle has no raw bodies left to digest, so
+  // re-pruning would only double-digest already-digested values.
+  if (bundle.retention.grade === 'redacted-only') return bundle;
   const pruned = structuredClone(bundle) as Partial<EvidenceBundle> & { run: EvidenceBundle['run'] };
   const digestBody = (receipt: EvidenceBundle['run']['baseline']): void => {
     for (const observation of receipt.observations) {

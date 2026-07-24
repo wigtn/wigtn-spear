@@ -7,9 +7,11 @@ import {
 } from '../src/crypto.js';
 import {
   createEvidenceBundle,
+  DEFAULT_RETENTION_DAYS,
   pruneEvidenceBundle,
   renderEvidenceMarkdown,
   replayEvidenceBundle,
+  retentionDue,
   verifyEvidenceBundle,
   verifyFix,
   type EvidenceSigningKey,
@@ -296,6 +298,42 @@ test('pruning a bundle digests raw bodies, keeps it verifiable and replayable, a
   // Still verifiable and replayable after pruning.
   assert.doesNotThrow(() => verifyEvidenceBundle(pruned, EVIDENCE_TRUST));
   assert.equal(replayEvidenceBundle(pruned, EVIDENCE_TRUST).replayedDisposition, 'proven');
+});
+
+test('retention window is configurable and retentionDue enforces it', async () => {
+  const run = await provenRun();
+  const created = new Date('2026-07-24T00:00:00.000Z');
+  const bundle = createEvidenceBundle(run, bolaProgram(), SIGNING_KEY, created, undefined, 7);
+  // rawExpiresAt is exactly `created + retentionDays`.
+  assert.equal(bundle.retention.rawExpiresAt, '2026-07-31T00:00:00.000Z');
+  // Not due one day before the window, due once it has elapsed.
+  assert.equal(retentionDue(bundle, new Date('2026-07-30T00:00:00.000Z')), false);
+  assert.equal(retentionDue(bundle, new Date('2026-07-31T00:00:00.000Z')), true);
+
+  // The default window applies when unspecified.
+  const dflt = createEvidenceBundle(run, bolaProgram(), SIGNING_KEY, created);
+  const expectedDefault = new Date(created.getTime() + DEFAULT_RETENTION_DAYS * 86_400_000);
+  assert.equal(dflt.retention.rawExpiresAt, expectedDefault.toISOString());
+
+  assert.throws(
+    () => createEvidenceBundle(run, bolaProgram(), SIGNING_KEY, created, undefined, 0),
+    /retentionDays must be a positive number/u,
+  );
+});
+
+test('pruning is idempotent: a redacted-only bundle is returned unchanged, not double-digested', async () => {
+  const run = await provenRun();
+  const bundle = createEvidenceBundle(run, bolaProgram(), SIGNING_KEY);
+  const pruned = pruneEvidenceBundle(bundle, EVIDENCE_TRUST, SIGNING_KEY);
+  // A redacted-only bundle no longer counts as retention-due.
+  assert.equal(retentionDue(pruned, new Date('2100-01-01T00:00:00.000Z')), false);
+  const twice = pruneEvidenceBundle(pruned, EVIDENCE_TRUST, SIGNING_KEY);
+  assert.equal(twice.retention.grade, 'redacted-only');
+  // The digested body is not re-digested on a second prune.
+  assert.equal(
+    twice.run.attacks[0]!.observations[0]!.body,
+    pruned.run.attacks[0]!.observations[0]!.body,
+  );
 });
 
 test('verifyFix reports fixed, utility-regression, and not-fixed verdicts', async () => {

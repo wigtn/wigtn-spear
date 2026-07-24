@@ -289,6 +289,13 @@ family 착수 시 함께.
 **테스트(AC-802)**: prune 후 observations.body가 digest로 대체되고 replay/verify는
 여전히 통과, finding ID 동일.
 
+**구현 상태(2026-07-24 확장)**: 초기 구현은 `rawExpiresAt`를 기록만 하고 강제하지 않았음.
+개선: (1) `retentionDue(bundle, now)` + `spear evidence prune --if-expired` — 창 경과 전과
+이미 `redacted-only`면 서명 키 없이 안전한 no-op(cron/CI용). (2) `pruneEvidenceBundle` 멱등화
+(redacted-only는 그대로 반환, 이중 digest 방지). (3) 창 설정 가능 — `createEvidenceBundle(...,
+retentionDays)` + `run project --retention-days`. `test/evidence.test.ts`(retention/멱등),
+`test/replay-verify-fix.test.ts`(CLI --if-expired no-op→prune).
+
 ---
 
 ## S8. Finding lineage diff — FR-908, AC-905

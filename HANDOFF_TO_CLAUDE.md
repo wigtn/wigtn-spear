@@ -187,6 +187,18 @@
   - **WebSocket e2e는 명시적 defer**(owner 결정, 2026-07-24). `ws` dev 의존성 + undici WS pinnable
     dispatcher(M-4) 선행.
 
+- **2026-07-24 evidence 강화 + CLI 정리 + retention 만료 강제 (`npm run check`: 94 passed).**
+  - **강화(보안)**: canary-egress가 evidence bundle에 raw egress 토큰을 leak하던 것 차단.
+    `sanitizedProgram`이 `oracle.canary` + 그 토큰을 담은 request path/body까지 redaction.
+    `test/canary-egress.test.ts`가 bundle JSON에 raw 토큰 없음을 검증.
+  - **CLI 정리**: `run project`가 `response-contains`만 constant Twin으로 하드코딩 → 응답전용
+    `differential-access`가 불필요하게 control 요구. `oracleStatePaths(oracle).length===0`으로
+    판별하도록 교체(원칙: state 경로 보는 oracle만 control 필요). help/README 정확화.
+  - **retention 개선(S7 후속)**: `rawExpiresAt`가 장식이던 것 → 강제. `retentionDue(bundle,now)`
+    + `evidence prune --if-expired`(경과 전·이미 pruned면 서명키 없이 no-op, cron 안전).
+    `pruneEvidenceBundle` 멱등화(redacted-only 그대로 반환). 창 설정 `--retention-days`/
+    `createEvidenceBundle(...,retentionDays)`. `test/evidence.test.ts`·`test/replay-verify-fix.test.ts`.
+
 - **2026-07-24 `canary-egress` oracle 추가 (`npm run check`: 91 passed).**
   - FR-504/FR-810: owned sink이 **정확한 run-scoped canary 토큰**을 관측했으면 forbidden.
     기존 SSRF는 `state-path-increased`(canarySinkHits 카운터)로 우회 — "카운터가 늘었다"만

@@ -129,7 +129,15 @@ node dist/src/cli.js replay --bundle ./bundle.json --trust-store ./evidence-trus
 # 수정 후 재실행한 번들과 비교 (benign-utility 증명 시에만 fixed)
 node dist/src/cli.js verify-fix --original ./bundle.json --fixed ./bundle.fixed.json \
   --trust-store ./evidence-trust.json --benign-utility-passed
+
+# retention 만료 강제 (창 경과 전·이미 pruned면 no-op → cron/CI 안전)
+node dist/src/cli.js evidence prune --bundle ./bundle.json --trust-store ./evidence-trust.json \
+  --evidence-private-key ./evidence.pem --evidence-key-id evidence-2026 --if-expired
 ```
+
+raw response body 보존 창은 기본 30일이며 `run project --retention-days <n>`으로 조정합니다.
+경과 후 `evidence prune --if-expired`가 body를 digest로 대체하고 `redacted-only`로 재봉인하지만,
+replay/verify는 sealed predicate 플래그만 쓰므로 그대로 통과합니다.
 
 실제 run은 undici dispatcher로 소켓을 사전 resolve된 IP에 pin하므로 hostname
 target도 안전합니다(DNS rebinding 차단). embedder가 자체 `fetch`를 주입하는 경우엔
