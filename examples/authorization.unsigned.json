@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "3.0",
+  "kind": "authorization-manifest",
+  "engagement": {
+    "id": "replace-engagement-id",
+    "owner": "replace-owner@example.test",
+    "issuedAt": "2026-07-23T00:00:00.000Z",
+    "expiresAt": "2026-07-30T00:00:00.000Z"
+  },
+  "target": {
+    "name": "fixture-app",
+    "repositoryPath": "/absolute/path/to/owned/fixture-app",
+    "buildDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "origins": [
+      "http://127.0.0.1:4310"
+    ],
+    "environment": "test"
+  },
+  "capabilities": [
+    "discover",
+    "run:project"
+  ],
+  "safety": {
+    "allowedHosts": [
+      "127.0.0.1"
+    ],
+    "allowedCanaryOrigins": [
+      "http://127.0.0.1:4399"
+    ],
+    "maxRequests": 100,
+    "maxWallTimeMs": 30000,
+    "maxConcurrency": 2,
+    "maxResponseBytes": 262144,
+    "allowMutations": false,
+    "twinAttested": false
+  }
+}

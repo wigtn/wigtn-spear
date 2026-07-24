@@ -1,0 +1,33 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SPEAR fixture",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/items/{id}": {
+      "get": {
+        "security": [
+          {
+            "fixtureBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "fixture item"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "health"
+          }
+        }
+      }
+    }
+  }
+}

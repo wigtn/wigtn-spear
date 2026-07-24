@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "3.0",
+  "kind": "coverage-policy",
+  "requiredProtocols": [
+    "http"
+  ],
+  "requiredSurfaceIds": [],
+  "requiredWitnesses": [
+    "http-response"
+  ],
+  "minimumEvidenceGrade": "mapped",
+  "allowedSafetyClasses": [
+    "passive",
+    "active-safe"
+  ]
+}

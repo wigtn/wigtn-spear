@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Verify example trace
+        run: |
+          set +e
+          node dist/src/cli.js agent verify \
+            --contract examples/agent.contract.json \
+            --trace examples/agent.trace.json \
+            --json
+          code=$?
+          test "$code" -eq 1
