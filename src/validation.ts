@@ -271,7 +271,7 @@ export function surfaceId(
 }
 
 const MAPPING_SOURCES = new Set<MappingSource>([
-  'operator', 'openapi', 'next-app', 'supabase', 'graphql-schema', 'har-capture',
+  'operator', 'openapi', 'next-app', 'supabase', 'graphql-schema', 'har-capture', 'postman',
 ]);
 
 /**

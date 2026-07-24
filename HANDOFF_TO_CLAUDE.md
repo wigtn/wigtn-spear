@@ -170,6 +170,14 @@
   - **race pack**: 결정적 concurrent 실행 + FR-307 fault schedule + containment attestation.
   - **adaptive search(FR-407)·real-target 검증(Phase 5)**: PRD Go-gate 대상.
 
+- **2026-07-25 Postman(v2.1) discovery 매퍼 (`npm run check`: 109 passed).**
+  - HAR(캡처)에 이어 Postman(authored collection) 매퍼. `surfacesFromPostman`: `item[]` 재귀 walk
+    (폴더 중첩), request의 method+URL(raw string 또는 `{path:[...]}`) 추출, path 변수(`:id`/`{{var}}`)를
+    공유 `templatizePath`에서 `{id}`로 정규화(HAR과 수렴), auth block(non-noauth)·Authorization 헤더로
+    principal 판정.
+  - `MappingSource`에 `'postman'`, `DiscoverySources.postman`, CLI `--postman`.
+    `templatizePath`를 `:x`/`{{x}}`도 처리하게 확장(HAR엔 무해). `test/postman-mapper.test.ts`.
+
 - **2026-07-25 coverage policy 속성 기반 요구 `requiredDataClasses` (`npm run check`: 106 passed).**
   - policy가 surface를 명시적 ID로만 요구 가능했던 것(빌드마다 ID churn) 개선. `requiredDataClasses`:
     해당 data class를 가진 모든 surface는 (1) unsupported/blocked면 안 되고(hard gap), (2) grade floor

@@ -16,7 +16,8 @@ export type SurfaceProtocol =
   | 'agent'
   | 'unknown';
 export type MappingSource =
-  | 'operator' | 'openapi' | 'next-app' | 'supabase' | 'graphql-schema' | 'har-capture';
+  | 'operator' | 'openapi' | 'next-app' | 'supabase' | 'graphql-schema'
+  | 'har-capture' | 'postman';
 export type CoverageState =
   | 'discovered'
   | 'mapped'
