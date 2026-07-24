@@ -37,8 +37,10 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - 두 tenant disposable Twin과 독립 HTTP 제어 채널(reset/snapshot, 무결성 재현)
 - baseline / attack / counterfactual + deterministic replay threshold로
   `proven` / `rejected` / `flaky` / `error` 판정
-- 지원 attack family: BOLA, BFLA, mass assignment(BOPLA), SSRF→owned canary sink
-  (각각 vulnerable/fixed fixture로 proven/rejected 실증)
+- 지원 attack family: BOLA, BFLA, mass assignment(BOPLA), SSRF→owned canary sink,
+  idempotency 중복효과, config 변경, 비원자 partial-effect, workflow step-skip,
+  cache poisoning, GraphQL BOLA, differential authz(canary·상태변화 없이 두 principal
+  응답 동치로 BFLA 검출) — 각각 vulnerable/fixed fixture로 proven/rejected 실증
 
 **증거·수명주기**
 
@@ -52,7 +54,7 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - browser/WebSocket/gRPC/queue runtime 자동 mapping
 - agent tool/MCP/memory, race/parser/cloud 등 추가 attack family
 - live target을 재공격하는 CI deterministic replay
-- `state-path` 외 oracle 타입, HTTP 동시성
+- HTTP 동시성(paired/maxConcurrency 강제), canary-egress·browser/DB audit oracle
 
 `지원`이라고 부르려면 signed pack · applicability · vulnerable/fixed fixture ·
 independent witness · baseline/attack/counterfactual · replay threshold ·

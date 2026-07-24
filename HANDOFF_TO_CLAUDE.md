@@ -170,6 +170,23 @@
   - **race pack**: 결정적 concurrent 실행 + FR-307 fault schedule + containment attestation.
   - **adaptive search(FR-407)·real-target 검증(Phase 5)**: PRD Go-gate 대상.
 
+- **2026-07-24 PR #2 머지 후 `differential-access` oracle 추가 (`npm run check`: 89 passed).**
+  - S6/FR-507/AC-504: 두 principal이 같은 operation을 발행해 unprivileged가 privileged와
+    **동일한 2xx 응답**을 얻으면 forbidden(authz 발산, BFLA). canary·상태변화 없이 응답 동치만으로
+    탐지하는 새 primitive.
+  - `src/types.ts` CausalOracle union에 `differential-access`(privilegedRequestId/
+    unprivilegedRequestId) 추가. `src/oracle.ts` `evaluateOracle`에 판정(양쪽 2xx + body 동일),
+    `oracleStatePaths`는 `[]`(response-only, state diff 없음). `src/validation.ts`에 검증
+    (두 requestId distinct, http-gateway witness 강제).
+  - fixture 신규 route `GET /admin/report`: vulnerable=아무 actor나 동일 report, fixed=`admin`만
+    200/그외 403. `test/differential-oracle.test.ts`로 proven(vuln)/rejected(fixed) 실증.
+  - causal 매핑: 한 attack sequence 안에서 `asPrincipalId`로 priv(admin)/unpriv(user-b) 발행,
+    counterfactual은 unpriv가 자기 소유 `/items/item-b` 요청(endpoint swap 제거)→응답 발산. 순차라 결정적.
+  - **S4 concurrency semaphore는 보류**: sequence가 순차라 in-flight≤1, never-triggers여서 가치 낮음.
+    paired race family 착수 시 함께 구현.
+  - **WebSocket e2e는 명시적 defer**(owner 결정, 2026-07-24). `ws` dev 의존성 + undici WS pinnable
+    dispatcher(M-4) 선행.
+
 - **2026-07-24 Step D: Next.js/Supabase passive discovery 매퍼 (`npm run check`: 67 passed).**
   - `src/discovery.ts`: `surfacesFromNextRoutes`(route-handler/server-action/middleware),
     `surfacesFromSupabase`(table+RLS flag→rls-disabled state dep, storage bucket),

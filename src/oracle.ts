@@ -41,7 +41,21 @@ export function evaluateOracle(oracle: CausalOracle, ctx: OracleContext): boolea
     case 'partial-effect':
       // Asymmetric commit: the committed side moved but the rolled-back side did not.
       return pathChanged(ctx, oracle.committedPath) && !pathChanged(ctx, oracle.rolledBackPath);
+    case 'differential-access': {
+      // The unprivileged principal received a 2xx response identical to the
+      // privileged one: authorization did not differentiate them.
+      const priv = ctx.observations.find((item) => item.requestId === oracle.privilegedRequestId);
+      const unpriv = ctx.observations.find(
+        (item) => item.requestId === oracle.unprivilegedRequestId,
+      );
+      if (priv === undefined || unpriv === undefined) return false;
+      return is2xx(priv.status) && is2xx(unpriv.status) && priv.body === unpriv.body;
+    }
   }
+}
+
+function is2xx(status: number): boolean {
+  return status >= 200 && status < 300;
 }
 
 function pathChanged(ctx: OracleContext, path: string): boolean {
@@ -54,6 +68,7 @@ function pathChanged(ctx: OracleContext, path: string): boolean {
 export function oracleStatePaths(oracle: CausalOracle): string[] {
   switch (oracle.kind) {
     case 'response-contains':
+    case 'differential-access':
       return [];
     case 'partial-effect':
       return [oracle.committedPath, oracle.rolledBackPath];
