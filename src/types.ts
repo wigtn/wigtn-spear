@@ -357,6 +357,14 @@ export type CausalOracle =
     path: string;
   }
   | {
+    // A monotonic invariant was violated downward: a value that must never
+    // decrease did (audit-log purge / anti-forensics, balance underflow,
+    // version rollback) (FR-504).
+    kind: 'state-path-decreased';
+    witness: string;
+    path: string;
+  }
+  | {
     // A duplicate-effect predicate: the state delta exceeds what a single,
     // idempotent application should produce (S5/FR-806/FR-414).
     kind: 'state-path-delta-exceeds';

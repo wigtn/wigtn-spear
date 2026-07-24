@@ -140,8 +140,8 @@ Active causal run (emits a signed evidence bundle):
                     --acknowledge-authorization [--minimize]
                     [--retention-days <n>] [--output <bundle.json>]
     response-only oracles (response-contains, differential-access) run with a
-    constant Twin; state-observing oracles (state-path-increased/-changed/
-    -delta-exceeds, partial-effect, canary-egress) require twin.control
+    constant Twin; state-observing oracles (state-path-increased/-decreased/
+    -changed/-delta-exceeds, partial-effect, canary-egress) require twin.control
     (resetUrl/snapshotUrl) on an owned IP-literal origin.
     --minimize drops attack steps that are not required for the proven predicate.
 

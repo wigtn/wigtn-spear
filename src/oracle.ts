@@ -32,6 +32,10 @@ export function evaluateOracle(oracle: CausalOracle, ctx: OracleContext): boolea
       const pair = numericPair(ctx, oracle.path);
       return pair !== undefined && pair.after > pair.before;
     }
+    case 'state-path-decreased': {
+      const pair = numericPair(ctx, oracle.path);
+      return pair !== undefined && pair.after < pair.before;
+    }
     case 'state-path-delta-exceeds': {
       const pair = numericPair(ctx, oracle.path);
       return pair !== undefined && pair.after - pair.before > oracle.expected;

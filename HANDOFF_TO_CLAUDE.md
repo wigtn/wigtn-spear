@@ -187,6 +187,13 @@
   - **WebSocket e2e는 명시적 defer**(owner 결정, 2026-07-24). `ws` dev 의존성 + undici WS pinnable
     dispatcher(M-4) 선행.
 
+- **2026-07-24 `state-path-decreased` oracle + audit-tampering family (`npm run check`: 96 passed).**
+  - monotonic 하향 위반(감사 로그 purge·잔고 underflow·버전 롤백) 탐지. 숫자 기반이라 redaction
+    이슈 없음. `types.ts`/`oracle.ts`(after<before)/`validation.ts`(path+witness 그룹).
+    `oracleStatePaths`는 default `[path]`로 이미 커버.
+  - fixture: `#auditCount`(reset 시 3 seeded), `/audit/purge`(vuln=아무나→0, fixed=admin만/403).
+    `test/audit-tampering.test.ts` proven(3→0)/rejected.
+
 - **2026-07-24 evidence 강화 + CLI 정리 + retention 만료 강제 (`npm run check`: 94 passed).**
   - **강화(보안)**: canary-egress가 evidence bundle에 raw egress 토큰을 leak하던 것 차단.
     `sanitizedProgram`이 `oracle.canary` + 그 토큰을 담은 request path/body까지 redaction.

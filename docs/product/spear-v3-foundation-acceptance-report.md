@@ -12,7 +12,7 @@
 ```text
 $ npm run check
 typecheck: passed
-tests: 94 passed, 0 failed
+tests: 96 passed, 0 failed
 ```
 
 추가 smoke evidence:
@@ -92,10 +92,12 @@ fixed=rejected로 실증한다. 각각 disposable fixture + independent witness�
 | Cache poisoning (cross-tenant cached body) | response-contains + per-request principal | `test/workflow-cache.test.ts` |
 | Differential authz (BFLA, no marker) | `differential-access` (response equivalence) | `test/differential-oracle.test.ts` |
 | SSRF outbound canary egress | `canary-egress` (owned sink sees the exact token) | `test/canary-egress.test.ts` |
+| Audit-log tampering (anti-forensics) | `state-path-decreased` (monotonic violation) | `test/audit-tampering.test.ts` |
 
 oracle 평가는 `src/oracle.ts`로 분리(`evaluateOracle`), state diff의 비숫자 값은
 digest로 redaction(Critical #3 / PRD 리뷰 m-6). oracle 종류: `response-contains`,
-`state-path-increased`, `state-path-delta-exceeds`, `state-path-changed`,
+`state-path-increased`, `state-path-decreased`(monotonic 하향 위반 — 감사 로그 삭제·잔고
+underflow·롤백, `test/audit-tampering.test.ts`), `state-path-delta-exceeds`, `state-path-changed`,
 `partial-effect`(비원자 commit 후 부분 효과, `test/oracle-families.test.ts`, AC-505/FR-509),
 `differential-access`(두 principal 응답 동치로 authz 발산 검출, canary·상태변화 불요,
 `test/differential-oracle.test.ts`, AC-504/FR-507),

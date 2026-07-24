@@ -36,6 +36,7 @@ export class HttpFixture implements StateController {
   #adminCount = 0;
   #canarySinkHits = 0;
   #canarySink = '';
+  #auditCount = 3; // pre-seeded audit records; a monotonic value that must not drop
   #orderCount = 0;
   #configValue = 'initial';
   #debitTotal = 0;
@@ -104,6 +105,7 @@ export class HttpFixture implements StateController {
       adminCount: this.#adminCount,
       canarySinkHits: this.#canarySinkHits,
       canarySink: this.#canarySink,
+      auditCount: this.#auditCount,
       orderCount: this.#orderCount,
       configValue: this.#configValue,
       debitTotal: this.#debitTotal,
@@ -122,6 +124,7 @@ export class HttpFixture implements StateController {
     this.#adminCount = 0;
     this.#canarySinkHits = 0;
     this.#canarySink = '';
+    this.#auditCount = 3;
     this.#orderCount = 0;
     this.#configValue = 'initial';
     this.#debitTotal = 0;
@@ -174,6 +177,17 @@ export class HttpFixture implements StateController {
         return this.#json(res, 403, { error: 'forbidden' });
       }
       return this.#json(res, 200, { report: 'fleet-wide-metrics', total: 42 });
+    }
+
+    // Audit-log tampering / anti-forensics (FR-504): purging audit records drops
+    // a monotonic count that must never decrease. Vulnerable mode lets any actor
+    // purge; fixed mode restricts it to `admin`.
+    if (req.method === 'POST' && url.pathname === '/audit/purge') {
+      if (!this.vulnerable && actor !== 'admin') {
+        return this.#json(res, 403, { error: 'forbidden' });
+      }
+      this.#auditCount = 0;
+      return this.#json(res, 200, { purged: true });
     }
 
     if (req.method === 'POST' && url.pathname === '/admin/reindex') {

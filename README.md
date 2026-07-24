@@ -40,8 +40,8 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - 지원 attack family: BOLA, BFLA, mass assignment(BOPLA), SSRF→owned canary sink,
   idempotency 중복효과, config 변경, 비원자 partial-effect, workflow step-skip,
   cache poisoning, GraphQL BOLA, differential authz(canary·상태변화 없이 두 principal
-  응답 동치로 BFLA 검출), SSRF canary-egress(owned sink이 정확한 토큰 관측) — 각각
-  vulnerable/fixed fixture로 proven/rejected 실증
+  응답 동치로 BFLA 검출), SSRF canary-egress(owned sink이 정확한 토큰 관측), audit-log
+  tampering(monotonic 하향 위반) — 각각 vulnerable/fixed fixture로 proven/rejected 실증
 
 **증거·수명주기**
 

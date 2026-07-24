@@ -526,6 +526,7 @@ export function validateCausalHttpAttackProgram(value: unknown): CausalHttpAttac
     }
   } else if (
     oracle.kind === 'state-path-increased'
+    || oracle.kind === 'state-path-decreased'
     || oracle.kind === 'state-path-changed'
   ) {
     requireString(oracle, 'path', 'program.oracle');
