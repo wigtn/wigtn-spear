@@ -554,6 +554,12 @@ export function validateCausalHttpAttackProgram(value: unknown): CausalHttpAttac
     requireString(oracle, 'sinkPath', 'program.oracle');
     requireString(oracle, 'canary', 'program.oracle');
     requireString(oracle, 'witness', 'program.oracle');
+  } else if (oracle.kind === 'response-field-present') {
+    requireString(oracle, 'requestId', 'program.oracle');
+    requireString(oracle, 'jsonPath', 'program.oracle');
+    if (oracle.witness !== 'http-gateway') {
+      throw new SpearConfigError('response-field-present oracle requires http-gateway witness');
+    }
   } else {
     throw new SpearConfigError(`Unsupported causal HTTP oracle: ${String(oracle.kind)}`);
   }

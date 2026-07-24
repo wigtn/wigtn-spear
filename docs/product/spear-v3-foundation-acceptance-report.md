@@ -12,7 +12,7 @@
 ```text
 $ npm run check
 typecheck: passed
-tests: 96 passed, 0 failed
+tests: 98 passed, 0 failed
 ```
 
 추가 smoke evidence:
@@ -93,6 +93,7 @@ fixed=rejected로 실증한다. 각각 disposable fixture + independent witness�
 | Differential authz (BFLA, no marker) | `differential-access` (response equivalence) | `test/differential-oracle.test.ts` |
 | SSRF outbound canary egress | `canary-egress` (owned sink sees the exact token) | `test/canary-egress.test.ts` |
 | Audit-log tampering (anti-forensics) | `state-path-decreased` (monotonic violation) | `test/audit-tampering.test.ts` |
+| Excessive data exposure (BOPLA read, API3) | `response-field-present` (field structurally leaked) | `test/excessive-data-exposure.test.ts` |
 
 oracle 평가는 `src/oracle.ts`로 분리(`evaluateOracle`), state diff의 비숫자 값은
 digest로 redaction(Critical #3 / PRD 리뷰 m-6). oracle 종류: `response-contains`,
@@ -102,7 +103,10 @@ underflow·롤백, `test/audit-tampering.test.ts`), `state-path-delta-exceeds`, 
 `differential-access`(두 principal 응답 동치로 authz 발산 검출, canary·상태변화 불요,
 `test/differential-oracle.test.ts`, AC-504/FR-507),
 `canary-egress`(owned sink이 정확한 run-scoped 토큰을 관측 — 카운터 증가가 아닌 실제 토큰
-egress로 SSRF 증명, sink 값은 digest redaction, `test/canary-egress.test.ts`, FR-504/FR-810).
+egress로 SSRF 증명, sink 값은 digest redaction, `test/canary-egress.test.ts`, FR-504/FR-810),
+`response-field-present`(응답이 금지 필드를 구조적으로 노출 — 값을 몰라도 JSON path 존재로
+excessive data exposure 검출, 값은 redaction, `test/excessive-data-exposure.test.ts`,
+FR-504/OWASP API3).
 
 이 4개 외 family(GraphQL/WS/gRPC, path/command, agent/MCP/memory, race/parser 등)는
 동일 계약(signed pack·applicability·fixture·witness·baseline/attack/counterfactual·

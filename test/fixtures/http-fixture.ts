@@ -4,6 +4,8 @@ import type { StateController } from '../../src/twin.js';
 
 export const CANARY_USER_A = 'CANARY_USER_A_7F4C';
 export const CANARY_USER_B = 'CANARY_USER_B_2A11';
+/** A sensitive account field (API key) that must never be serialized to a client. */
+export const ACCOUNT_SECRET = 'CANARY_ACCOUNT_APIKEY_5B8F';
 /** An owned egress-canary token embedded in the SSRF probe URL. */
 export const CANARY_EGRESS = 'CANARY_EGRESS_9D3E';
 
@@ -166,6 +168,18 @@ export class HttpFixture implements StateController {
         return this.#json(res, 403, { error: 'forbidden' });
       }
       return this.#json(res, 200, { id: item.id, owner: item.owner, canary: item.canary });
+    }
+
+    // Excessive data exposure (FR-504, OWASP API3 / BOPLA read side): the account
+    // endpoint honours a client-supplied `include=secret` selector. Vulnerable mode
+    // serializes the sensitive apiKey when asked; fixed mode always returns the safe
+    // DTO. baseline/counterfactual omit the selector, so the field stays absent.
+    if (req.method === 'GET' && url.pathname === '/account') {
+      const account: Record<string, unknown> = { id: actor, name: actor };
+      if (this.vulnerable && url.searchParams.get('include') === 'secret') {
+        account.apiKey = ACCOUNT_SECRET;
+      }
+      return this.#json(res, 200, account);
     }
 
     // Differential authorization (S6/FR-507): an admin-only report with no
