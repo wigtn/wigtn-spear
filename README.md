@@ -104,8 +104,10 @@ node dist/src/cli.js run preview --manifest ./authorization.json \
 
 ## active causal run
 
-`state-path` oracle은 공격 표면과 분리된 owned control 채널(`twin.control`)이
-필요합니다. 먼저 disposable 무결성을 검증한 뒤 공격하고, 증거를 재검증합니다.
+상태를 관측하는 oracle(state-path 계열·partial-effect·canary-egress)은 공격 표면과
+분리된 owned control 채널(`twin.control`)이 필요합니다. 응답만 보는 oracle
+(response-contains·differential-access)은 constant Twin으로 동작합니다. 먼저 disposable
+무결성을 검증한 뒤 공격하고, 증거를 재검증합니다.
 
 ```bash
 # 제어 채널이 reset→snapshot→reset으로 baseline digest를 재현하는지 확인

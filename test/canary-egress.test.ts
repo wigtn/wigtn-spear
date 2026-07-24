@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { HttpControlStateController } from '../src/control-channel.js';
+import { generateEd25519KeyPair } from '../src/crypto.js';
 import { discoverSurfaces } from '../src/discovery.js';
+import { createEvidenceBundle, type EvidenceSigningKey } from '../src/evidence.js';
 import { runCausalHttpAttack } from '../src/http-runner.js';
 import { AttackTwin } from '../src/twin.js';
 import type {
@@ -115,6 +117,14 @@ test('canary-egress proves SSRF by the owned sink observing the exact run-scoped
   const sinkDiff = vulnerable.attacks[0]!.stateDiff.find((entry) => entry.path === 'canarySink');
   assert.ok(sinkDiff, 'canarySink appears in the allowlisted diff');
   assert.ok(!JSON.stringify(vulnerable).includes(CANARY_EGRESS), 'egress canary is redacted');
+
+  // The sealed evidence bundle must not carry the raw token either — neither in
+  // the oracle config nor in the attack payload (the probe URL) that held it.
+  const keys = generateEd25519KeyPair();
+  const signingKey: EvidenceSigningKey = { privateKeyPem: keys.privateKeyPem, keyId: 'egress-evidence' };
+  const bundle = createEvidenceBundle(vulnerable, canaryEgressProgram(), signingKey, new Date('2026-07-24T00:00:00.000Z'));
+  assert.ok(!JSON.stringify(bundle).includes(CANARY_EGRESS), 'egress canary is redacted from the evidence bundle');
+  assert.equal(bundle.attackProgram.oracle.kind, 'canary-egress');
 });
 
 test('canary-egress is rejected when the fetch endpoint refuses off-list URLs', async () => {

@@ -22,6 +22,7 @@ import {
 import { buildCampaignReport, renderReportMarkdown } from './report.js';
 import { runCausalHttpAttack } from './http-runner.js';
 import { minimizeCausalProgram } from './minimizer.js';
+import { oracleStatePaths } from './oracle.js';
 import { AttackTwin, ConstantStateController, type StateController } from './twin.js';
 import { HttpControlStateController } from './control-channel.js';
 import {
@@ -136,8 +137,10 @@ Active causal run (emits a signed evidence bundle):
                     --program <file> --twin <file>
                     --evidence-private-key <file> --evidence-key-id <id>
                     --acknowledge-authorization [--minimize] [--output <bundle.json>]
-    response-contains oracles run with a constant Twin; state-path oracles
-    require twin.control (resetUrl/snapshotUrl) on an owned IP-literal origin.
+    response-only oracles (response-contains, differential-access) run with a
+    constant Twin; state-observing oracles (state-path-increased/-changed/
+    -delta-exceeds, partial-effect, canary-egress) require twin.control
+    (resetUrl/snapshotUrl) on an owned IP-literal origin.
     --minimize drops attack steps that are not required for the proven predicate.
 
 Evidence (signed causal bundles):
@@ -374,13 +377,16 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     const program = validateCausalHttpAttackProgram(programInput);
     const twinDefinition = twinInput as TwinDefinition;
     let controller: StateController;
-    if (program.oracle.kind === 'response-contains') {
+    // An oracle needs the owned control channel iff it observes state paths;
+    // response-only oracles (response-contains, differential-access) run against
+    // a constant Twin.
+    if (oracleStatePaths(program.oracle).length === 0) {
       controller = new ConstantStateController();
     } else {
       const control = twinDefinition.control;
       if (!control) {
         throw new Error(
-          'state-path oracle requires an owned Twin control channel; add twin.control '
+          'state-observing oracle requires an owned Twin control channel; add twin.control '
           + '(resetUrl/snapshotUrl) and verify it first with `spear twin prepare`',
         );
       }

@@ -37,8 +37,15 @@ function sanitizedProgram(
   program: CausalHttpAttackProgram,
 ): CausalHttpAttackProgram {
   const clone = structuredClone(program);
+  // Tokens that must not survive anywhere in the stored program (oracle config
+  // AND the attack payloads that carry them, e.g. a probe URL in a request body).
+  const tokens: string[] = [];
   if (clone.oracle.kind === 'response-contains') {
     clone.oracle.value = '[CANARY]';
+  }
+  if (clone.oracle.kind === 'canary-egress') {
+    tokens.push(clone.oracle.canary);
+    clone.oracle.canary = '[CANARY]';
   }
   for (const sequence of [
     clone.execution.baseline,
@@ -52,6 +59,11 @@ function sanitizedProgram(
             request.headers[name] = '[REDACTED]';
           }
         }
+      }
+      for (const token of tokens) {
+        if (!token) continue;
+        request.path = request.path.split(token).join('[CANARY]');
+        if (request.body !== undefined) request.body = request.body.split(token).join('[CANARY]');
       }
     }
   }
@@ -161,6 +173,7 @@ export function createEvidenceBundle(
     replayCommand: 'spear replay --bundle <bundle.json> --trust-store <file>',
     redactionManifest: [
       { field: 'attackProgram.oracle.value', action: 'replaced' },
+      { field: 'attackProgram.oracle.canary + payloads carrying it', action: 'replaced' },
       { field: 'run.*.observations.body canaries', action: 'replaced' },
       { field: 'request authorization/cookie headers', action: 'removed' },
       { field: 'run.*.beforeState/afterState raw snapshots', action: 'digested' },
