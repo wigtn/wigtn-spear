@@ -170,6 +170,16 @@
   - **race pack**: 결정적 concurrent 실행 + FR-307 fault schedule + containment attestation.
   - **adaptive search(FR-407)·real-target 검증(Phase 5)**: PRD Go-gate 대상.
 
+- **2026-07-25 HAR discovery 매퍼 추가 (`npm run check`: 101 passed).**
+  - 정적 descriptor 매퍼(OpenAPI/Next/Supabase/GraphQL)에 이어 **캡처 트래픽(HAR)** 매퍼.
+    브라우저 devtools·프록시 export → 공격표면. red-team 워크플로(실트래픽 → surface)에 부합.
+  - `surfacesFromHar`: `log.entries[].request`의 method+URL path 추출, path의 ID 세그먼트
+    (숫자·UUID·24+ hex)를 `{id}`로 **템플릿화**해 폭발 방지, Authorization/Cookie 헤더 유무로
+    principal 판정. 반복 캡처는 buildInventory `mergeSurface`로 병합.
+  - `MappingSource`에 `'har-capture'` 추가(types/validation `MAPPING_SOURCES`). `DiscoverySources.har`,
+    CLI `discover`/`map`에 `--har`. `test/har-mapper.test.ts`(템플릿화·병합·malformed 거부).
+  - HAR은 target host로 스코프됐다고 가정(다른 매퍼처럼 descriptor 신뢰).
+
 - **2026-07-25 stacked PR mis-merge 복구 + 브랜치 정리.** PR #4~#7이 auto-retarget 실패로
   중간 브랜치에만 머지되어 main엔 #3까지만 반영됐던 것을 단일 PR #8로 main에 통합(96 tests).
   이후 모든 dangling 브랜치 삭제 → 원격·로컬 main만 남김. **교훈: stacked PR는 머지 시

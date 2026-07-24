@@ -106,9 +106,9 @@ function printHelp(): void {
 
 Passive:
   spear discover --profile <file> [--openapi <json>] [--next-routes <json>]
-                 [--supabase <json>] [--graphql <json>] [--output <file>]
+                 [--supabase <json>] [--graphql <json>] [--har <json>] [--output <file>]
   spear map --profile <file> [--openapi <json>] [--next-routes <json>]
-            [--supabase <json>] [--graphql <json>] [--output <file>]
+            [--supabase <json>] [--graphql <json>] [--har <json>] [--output <file>]
   spear coverage --inventory <file> --profile <file> --registry <file>
                  --trust-store <file> --policy <file> [--output <file>]
   spear diff --from <coverage.json> --to <coverage.json> [--output <file>]
@@ -243,11 +243,12 @@ async function optionalJson(parsed: ParsedArgs, name: string): Promise<unknown> 
 
 async function commandDiscover(parsed: ParsedArgs): Promise<void> {
   const profile = await readJsonFile<unknown>(requiredOption(parsed, 'profile'));
-  const [openApi, nextRoutes, supabase, graphql] = await Promise.all([
+  const [openApi, nextRoutes, supabase, graphql, har] = await Promise.all([
     optionalJson(parsed, 'openapi'),
     optionalJson(parsed, 'next-routes'),
     optionalJson(parsed, 'supabase'),
     optionalJson(parsed, 'graphql'),
+    optionalJson(parsed, 'har'),
   ]);
   await emit(
     discoverSurfacesFrom(profile, {
@@ -255,6 +256,7 @@ async function commandDiscover(parsed: ParsedArgs): Promise<void> {
       ...(nextRoutes !== undefined ? { nextRoutes } : {}),
       ...(supabase !== undefined ? { supabase } : {}),
       ...(graphql !== undefined ? { graphql } : {}),
+      ...(har !== undefined ? { har } : {}),
     }),
     parsed,
   );
