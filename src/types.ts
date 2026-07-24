@@ -557,6 +557,13 @@ export interface CampaignReport {
     error: RunSummary[];
   };
   secureVerdict: false;
+  // Reconciles the coverage ledger against the evidence actually collected:
+  // counts by state, and the attackable surfaces no bundle exercised (the
+  // actionable "attack these next" list).
+  coverageSummary: {
+    byState: Partial<Record<CoverageState, number>>;
+    attackableUnexercised: string[];
+  };
   bundleRefs: Array<{
     findingId?: string;
     runId: string;
