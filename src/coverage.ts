@@ -113,9 +113,25 @@ export function evaluateCoverage(
       unmet.add(`Policy-required witness is unavailable: ${witness}`);
     }
   }
+  const requiredDataClasses = policy.requiredDataClasses ?? [];
   for (const item of ledger) {
+    const matchedDataClasses = item.surface.dataClasses.filter(
+      (dataClass) => requiredDataClasses.includes(dataClass),
+    );
     const requiredByPolicy = policy.requiredSurfaceIds.includes(item.surface.id)
-      || policy.requiredProtocols.includes(item.surface.protocol);
+      || policy.requiredProtocols.includes(item.surface.protocol)
+      || matchedDataClasses.length > 0;
+    // A data-class-required surface that cannot even be attacked is a hard gap,
+    // regardless of the minimum grade (an unsupported PII surface is never "ok").
+    if (
+      matchedDataClasses.length > 0
+      && (item.state === 'unsupported' || item.state === 'blocked')
+    ) {
+      unmet.add(
+        `Surface ${item.surface.id} carries required data class(es) `
+        + `${matchedDataClasses.join(', ')} but is ${item.state}`,
+      );
+    }
     if (
       requiredByPolicy
       && EVIDENCE_RANK[item.evidenceGrade] < EVIDENCE_RANK[policy.minimumEvidenceGrade]

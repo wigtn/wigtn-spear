@@ -170,6 +170,15 @@
   - **race pack**: 결정적 concurrent 실행 + FR-307 fault schedule + containment attestation.
   - **adaptive search(FR-407)·real-target 검증(Phase 5)**: PRD Go-gate 대상.
 
+- **2026-07-25 coverage policy 속성 기반 요구 `requiredDataClasses` (`npm run check`: 106 passed).**
+  - policy가 surface를 명시적 ID로만 요구 가능했던 것(빌드마다 ID churn) 개선. `requiredDataClasses`:
+    해당 data class를 가진 모든 surface는 (1) unsupported/blocked면 안 되고(hard gap), (2) grade floor
+    (minimumEvidenceGrade) 충족해야 함. optional이라 back-compat.
+  - `types.ts`(optional 필드), `validation.ts`(있을 때만 stringArray 검증),
+    `coverage.ts`(matchedDataClasses → requiredByPolicy 확장 + unsupported/blocked 명시 unmet).
+  - `test/coverage-policy-dataclass.test.ts`: 속성 선택으로 grade floor 적용/미적용, unsupported gap,
+    back-compat.
+
 - **2026-07-25 `response-header-contains` oracle + CORS misconfig family (`npm run check`: 103 passed).**
   - 응답 헤더에 금지 값이 있으면 forbidden(FR-504). CORS 오설정(공격자 Origin이 ACAO에 반영)·
     open redirect(Location에 외부 host)·헤더 인젝션 커버. 헤더명 case-insensitive, 값 substring.

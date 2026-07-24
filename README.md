@@ -28,6 +28,8 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
   HAR 캡처 트래픽 매퍼(path id 템플릿화·중복 병합)
 - surface stable-ID 재계산·중복·target 바인딩 검증(변조 감지)
 - compatible/missing pack, missing witness, blind spot, evidence grade ledger
+- explicit coverage policy: 속성 기반 `requiredDataClasses`(특정 data class surface는
+  attackable+grade floor 강제, ID churn에 강함), protocol/surface/witness 요구
 - surface/coverage/pack-version diff, coverage 실패 전용 exit code `3`
 
 **active causal 공격**

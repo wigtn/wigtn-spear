@@ -12,7 +12,7 @@
 ```text
 $ npm run check
 typecheck: passed
-tests: 103 passed, 0 failed
+tests: 106 passed, 0 failed
 ```
 
 추가 smoke evidence:
@@ -153,7 +153,7 @@ digest), #5 (surface inventory signature), #6-#9, Medium #11-#14.
 |---|---|---|
 | `B-01` signed registry ambiguity | Satisfied | registry 전체 Ed25519 signature + pack canonical descriptor digest |
 | `B-02` build digest source | Satisfied | CI/operator supplied SHA-256, manifest/profile exact match |
-| `B-03` coverage-complete criteria | Satisfied | explicit policy, evidence grade, missing pack/witness failure |
+| `B-03` coverage-complete criteria | Satisfied | explicit policy, evidence grade, missing pack/witness failure. **속성 기반 `requiredDataClasses`**: 특정 data class를 가진 모든 surface가 attackable+minimumEvidenceGrade 충족 강제(ID churn에 강함), `test/coverage-policy-dataclass.test.ts` |
 | `H-01` oversized Phase 1 | Satisfied | foundation scope를 별도 선언하고 full Phase 1 완료를 주장하지 않음 |
 | `H-02` mixed protocol gap | Partially satisfied | 현재 지원 범위를 operator/OpenAPI JSON으로 제한 |
 | `H-03` pre-access authorization | Satisfied | run preparation의 첫 경계에서 authorization 검증 |
