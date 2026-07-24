@@ -40,7 +40,8 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - 지원 attack family: BOLA, BFLA, mass assignment(BOPLA), SSRF→owned canary sink,
   idempotency 중복효과, config 변경, 비원자 partial-effect, workflow step-skip,
   cache poisoning, GraphQL BOLA, differential authz(canary·상태변화 없이 두 principal
-  응답 동치로 BFLA 검출) — 각각 vulnerable/fixed fixture로 proven/rejected 실증
+  응답 동치로 BFLA 검출), SSRF canary-egress(owned sink이 정확한 토큰 관측), audit-log
+  tampering(monotonic 하향 위반) — 각각 vulnerable/fixed fixture로 proven/rejected 실증
 
 **증거·수명주기**
 
@@ -54,7 +55,7 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - browser/WebSocket/gRPC/queue runtime 자동 mapping
 - agent tool/MCP/memory, race/parser/cloud 등 추가 attack family
 - live target을 재공격하는 CI deterministic replay
-- HTTP 동시성(paired/maxConcurrency 강제), canary-egress·browser/DB audit oracle
+- HTTP 동시성(paired/maxConcurrency 강제), browser/DB audit witness oracle
 
 `지원`이라고 부르려면 signed pack · applicability · vulnerable/fixed fixture ·
 independent witness · baseline/attack/counterfactual · replay threshold ·
@@ -103,8 +104,10 @@ node dist/src/cli.js run preview --manifest ./authorization.json \
 
 ## active causal run
 
-`state-path` oracle은 공격 표면과 분리된 owned control 채널(`twin.control`)이
-필요합니다. 먼저 disposable 무결성을 검증한 뒤 공격하고, 증거를 재검증합니다.
+상태를 관측하는 oracle(state-path 계열·partial-effect·canary-egress)은 공격 표면과
+분리된 owned control 채널(`twin.control`)이 필요합니다. 응답만 보는 oracle
+(response-contains·differential-access)은 constant Twin으로 동작합니다. 먼저 disposable
+무결성을 검증한 뒤 공격하고, 증거를 재검증합니다.
 
 ```bash
 # 제어 채널이 reset→snapshot→reset으로 baseline digest를 재현하는지 확인
@@ -126,7 +129,15 @@ node dist/src/cli.js replay --bundle ./bundle.json --trust-store ./evidence-trus
 # 수정 후 재실행한 번들과 비교 (benign-utility 증명 시에만 fixed)
 node dist/src/cli.js verify-fix --original ./bundle.json --fixed ./bundle.fixed.json \
   --trust-store ./evidence-trust.json --benign-utility-passed
+
+# retention 만료 강제 (창 경과 전·이미 pruned면 no-op → cron/CI 안전)
+node dist/src/cli.js evidence prune --bundle ./bundle.json --trust-store ./evidence-trust.json \
+  --evidence-private-key ./evidence.pem --evidence-key-id evidence-2026 --if-expired
 ```
+
+raw response body 보존 창은 기본 30일이며 `run project --retention-days <n>`으로 조정합니다.
+경과 후 `evidence prune --if-expired`가 body를 digest로 대체하고 `redacted-only`로 재봉인하지만,
+replay/verify는 sealed predicate 플래그만 쓰므로 그대로 통과합니다.
 
 실제 run은 undici dispatcher로 소켓을 사전 resolve된 IP에 pin하므로 hostname
 target도 안전합니다(DNS rebinding 차단). embedder가 자체 `fetch`를 주입하는 경우엔

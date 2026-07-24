@@ -32,6 +32,10 @@ export function evaluateOracle(oracle: CausalOracle, ctx: OracleContext): boolea
       const pair = numericPair(ctx, oracle.path);
       return pair !== undefined && pair.after > pair.before;
     }
+    case 'state-path-decreased': {
+      const pair = numericPair(ctx, oracle.path);
+      return pair !== undefined && pair.after < pair.before;
+    }
     case 'state-path-delta-exceeds': {
       const pair = numericPair(ctx, oracle.path);
       return pair !== undefined && pair.after - pair.before > oracle.expected;
@@ -50,6 +54,15 @@ export function evaluateOracle(oracle: CausalOracle, ctx: OracleContext): boolea
       );
       if (priv === undefined || unpriv === undefined) return false;
       return is2xx(priv.status) && is2xx(unpriv.status) && priv.body === unpriv.body;
+    }
+    case 'canary-egress': {
+      // The owned sink holds the specific canary now but did not before: this
+      // exact token egressed during the sequence.
+      const before = getPath(ctx.beforeState, oracle.sinkPath);
+      const after = getPath(ctx.afterState, oracle.sinkPath);
+      const seenAfter = typeof after === 'string' && after.includes(oracle.canary);
+      const seenBefore = typeof before === 'string' && before.includes(oracle.canary);
+      return seenAfter && !seenBefore;
     }
   }
 }
@@ -72,6 +85,8 @@ export function oracleStatePaths(oracle: CausalOracle): string[] {
       return [];
     case 'partial-effect':
       return [oracle.committedPath, oracle.rolledBackPath];
+    case 'canary-egress':
+      return [oracle.sinkPath];
     default:
       return [oracle.path];
   }

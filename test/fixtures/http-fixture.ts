@@ -4,6 +4,8 @@ import type { StateController } from '../../src/twin.js';
 
 export const CANARY_USER_A = 'CANARY_USER_A_7F4C';
 export const CANARY_USER_B = 'CANARY_USER_B_2A11';
+/** An owned egress-canary token embedded in the SSRF probe URL. */
+export const CANARY_EGRESS = 'CANARY_EGRESS_9D3E';
 
 interface FixtureItem {
   id: string;
@@ -33,6 +35,8 @@ export class HttpFixture implements StateController {
   #reindexCount = 0;
   #adminCount = 0;
   #canarySinkHits = 0;
+  #canarySink = '';
+  #auditCount = 3; // pre-seeded audit records; a monotonic value that must not drop
   #orderCount = 0;
   #configValue = 'initial';
   #debitTotal = 0;
@@ -100,6 +104,8 @@ export class HttpFixture implements StateController {
       reindexCount: this.#reindexCount,
       adminCount: this.#adminCount,
       canarySinkHits: this.#canarySinkHits,
+      canarySink: this.#canarySink,
+      auditCount: this.#auditCount,
       orderCount: this.#orderCount,
       configValue: this.#configValue,
       debitTotal: this.#debitTotal,
@@ -117,6 +123,8 @@ export class HttpFixture implements StateController {
     this.#reindexCount = 0;
     this.#adminCount = 0;
     this.#canarySinkHits = 0;
+    this.#canarySink = '';
+    this.#auditCount = 3;
     this.#orderCount = 0;
     this.#configValue = 'initial';
     this.#debitTotal = 0;
@@ -171,6 +179,17 @@ export class HttpFixture implements StateController {
       return this.#json(res, 200, { report: 'fleet-wide-metrics', total: 42 });
     }
 
+    // Audit-log tampering / anti-forensics (FR-504): purging audit records drops
+    // a monotonic count that must never decrease. Vulnerable mode lets any actor
+    // purge; fixed mode restricts it to `admin`.
+    if (req.method === 'POST' && url.pathname === '/audit/purge') {
+      if (!this.vulnerable && actor !== 'admin') {
+        return this.#json(res, 403, { error: 'forbidden' });
+      }
+      this.#auditCount = 0;
+      return this.#json(res, 200, { purged: true });
+    }
+
     if (req.method === 'POST' && url.pathname === '/admin/reindex') {
       if (!this.vulnerable && actor !== 'admin') {
         return this.#json(res, 403, { error: 'forbidden' });
@@ -198,7 +217,10 @@ export class HttpFixture implements StateController {
       const body = await this.#readJsonBody(req);
       const requested = typeof body.url === 'string' ? body.url : '';
       if (!this.vulnerable) return this.#json(res, 403, { error: 'ssrf-blocked' });
-      if (requested) this.#canarySinkHits += 1; // the owned canary sink observed a hit
+      if (requested) {
+        this.#canarySinkHits += 1; // the owned canary sink observed a hit
+        this.#canarySink = requested; // ...carrying whatever token the probe URL held
+      }
       return this.#json(res, 200, { fetched: Boolean(requested) });
     }
 

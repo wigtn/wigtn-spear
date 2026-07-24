@@ -187,6 +187,37 @@
   - **WebSocket e2e는 명시적 defer**(owner 결정, 2026-07-24). `ws` dev 의존성 + undici WS pinnable
     dispatcher(M-4) 선행.
 
+- **2026-07-24 `state-path-decreased` oracle + audit-tampering family (`npm run check`: 96 passed).**
+  - monotonic 하향 위반(감사 로그 purge·잔고 underflow·버전 롤백) 탐지. 숫자 기반이라 redaction
+    이슈 없음. `types.ts`/`oracle.ts`(after<before)/`validation.ts`(path+witness 그룹).
+    `oracleStatePaths`는 default `[path]`로 이미 커버.
+  - fixture: `#auditCount`(reset 시 3 seeded), `/audit/purge`(vuln=아무나→0, fixed=admin만/403).
+    `test/audit-tampering.test.ts` proven(3→0)/rejected.
+
+- **2026-07-24 evidence 강화 + CLI 정리 + retention 만료 강제 (`npm run check`: 94 passed).**
+  - **강화(보안)**: canary-egress가 evidence bundle에 raw egress 토큰을 leak하던 것 차단.
+    `sanitizedProgram`이 `oracle.canary` + 그 토큰을 담은 request path/body까지 redaction.
+    `test/canary-egress.test.ts`가 bundle JSON에 raw 토큰 없음을 검증.
+  - **CLI 정리**: `run project`가 `response-contains`만 constant Twin으로 하드코딩 → 응답전용
+    `differential-access`가 불필요하게 control 요구. `oracleStatePaths(oracle).length===0`으로
+    판별하도록 교체(원칙: state 경로 보는 oracle만 control 필요). help/README 정확화.
+  - **retention 개선(S7 후속)**: `rawExpiresAt`가 장식이던 것 → 강제. `retentionDue(bundle,now)`
+    + `evidence prune --if-expired`(경과 전·이미 pruned면 서명키 없이 no-op, cron 안전).
+    `pruneEvidenceBundle` 멱등화(redacted-only 그대로 반환). 창 설정 `--retention-days`/
+    `createEvidenceBundle(...,retentionDays)`. `test/evidence.test.ts`·`test/replay-verify-fix.test.ts`.
+
+- **2026-07-24 `canary-egress` oracle 추가 (`npm run check`: 91 passed).**
+  - FR-504/FR-810: owned sink이 **정확한 run-scoped canary 토큰**을 관측했으면 forbidden.
+    기존 SSRF는 `state-path-increased`(canarySinkHits 카운터)로 우회 — "카운터가 늘었다"만
+    보증, 무관 트래픽 false-positive 가능. canary-egress는 그 토큰이 실제 egress됐음을 증명.
+  - `types.ts`에 `canary-egress`(sinkPath/canary) 추가. `oracle.ts` `evaluateOracle`:
+    after의 sinkPath 값이 canary 포함 && before는 미포함. `oracleStatePaths`는 `[sinkPath]`.
+    `validation.ts` 검증(sinkPath/canary/witness string).
+  - fixture: `#canarySink` state 추가(`#state()`/`reset()` 반영), `/fetch` vulnerable이 probe
+    URL을 sink에 기록. `CANARY_EGRESS` 상수. sink 값은 비숫자라 allowlistedStateDiff에서
+    digest redaction → raw canary 미저장(테스트로 `!JSON.stringify(run).includes(CANARY_EGRESS)` 검증).
+  - `test/canary-egress.test.ts`: proven(vuln)/rejected(fixed).
+
 - **2026-07-24 Step D: Next.js/Supabase passive discovery 매퍼 (`npm run check`: 67 passed).**
   - `src/discovery.ts`: `surfacesFromNextRoutes`(route-handler/server-action/middleware),
     `surfacesFromSupabase`(table+RLS flag→rls-disabled state dep, storage bucket),

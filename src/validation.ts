@@ -526,6 +526,7 @@ export function validateCausalHttpAttackProgram(value: unknown): CausalHttpAttac
     }
   } else if (
     oracle.kind === 'state-path-increased'
+    || oracle.kind === 'state-path-decreased'
     || oracle.kind === 'state-path-changed'
   ) {
     requireString(oracle, 'path', 'program.oracle');
@@ -549,6 +550,10 @@ export function validateCausalHttpAttackProgram(value: unknown): CausalHttpAttac
     if (oracle.witness !== 'http-gateway') {
       throw new SpearConfigError('differential-access oracle requires http-gateway witness');
     }
+  } else if (oracle.kind === 'canary-egress') {
+    requireString(oracle, 'sinkPath', 'program.oracle');
+    requireString(oracle, 'canary', 'program.oracle');
+    requireString(oracle, 'witness', 'program.oracle');
   } else {
     throw new SpearConfigError(`Unsupported causal HTTP oracle: ${String(oracle.kind)}`);
   }

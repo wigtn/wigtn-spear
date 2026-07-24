@@ -12,7 +12,7 @@
 ```text
 $ npm run check
 typecheck: passed
-tests: 89 passed, 0 failed
+tests: 96 passed, 0 failed
 ```
 
 추가 smoke evidence:
@@ -91,13 +91,18 @@ fixed=rejected로 실증한다. 각각 disposable fixture + independent witness�
 | Workflow step-skip (ship without pay) | state-path `unpaidShipments` | `test/workflow-cache.test.ts` |
 | Cache poisoning (cross-tenant cached body) | response-contains + per-request principal | `test/workflow-cache.test.ts` |
 | Differential authz (BFLA, no marker) | `differential-access` (response equivalence) | `test/differential-oracle.test.ts` |
+| SSRF outbound canary egress | `canary-egress` (owned sink sees the exact token) | `test/canary-egress.test.ts` |
+| Audit-log tampering (anti-forensics) | `state-path-decreased` (monotonic violation) | `test/audit-tampering.test.ts` |
 
 oracle 평가는 `src/oracle.ts`로 분리(`evaluateOracle`), state diff의 비숫자 값은
 digest로 redaction(Critical #3 / PRD 리뷰 m-6). oracle 종류: `response-contains`,
-`state-path-increased`, `state-path-delta-exceeds`, `state-path-changed`,
+`state-path-increased`, `state-path-decreased`(monotonic 하향 위반 — 감사 로그 삭제·잔고
+underflow·롤백, `test/audit-tampering.test.ts`), `state-path-delta-exceeds`, `state-path-changed`,
 `partial-effect`(비원자 commit 후 부분 효과, `test/oracle-families.test.ts`, AC-505/FR-509),
 `differential-access`(두 principal 응답 동치로 authz 발산 검출, canary·상태변화 불요,
-`test/differential-oracle.test.ts`, AC-504/FR-507).
+`test/differential-oracle.test.ts`, AC-504/FR-507),
+`canary-egress`(owned sink이 정확한 run-scoped 토큰을 관측 — 카운터 증가가 아닌 실제 토큰
+egress로 SSRF 증명, sink 값은 digest redaction, `test/canary-egress.test.ts`, FR-504/FR-810).
 
 이 4개 외 family(GraphQL/WS/gRPC, path/command, agent/MCP/memory, race/parser 등)는
 동일 계약(signed pack·applicability·fixture·witness·baseline/attack/counterfactual·
@@ -133,7 +138,7 @@ digest), #5 (surface inventory signature), #6-#9, Medium #11-#14.
 | S1 finding-state schema + `report` (FR-704·706·707 / AC-702·703) | Satisfied | `src/report.ts`, `spear report`, `test/report.test.ts` — proven/candidate/rejected/flaky/error 분리, coverage-first, `secureVerdict:false`, redaction |
 | S2 replay threshold 강제 (FR-603 / AC-601·602) | Satisfied | `validateCausalHttpAttackProgram`(deterministic all-success·nondeterministic 3/2), `test/replay-threshold.test.ts` |
 | S3 causal minimizer (FR-604 / AC-603) | Satisfied | `src/minimizer.ts`, `run project --minimize`, `test/minimizer.test.ts` — 불필요 step 제거·predicate 유지·attack 비움 금지 |
-| S7 retention lifecycle (FR-804 / AC-802) | Satisfied | `pruneEvidenceBundle`, `spear evidence prune`, `test/evidence.test.ts` — body digest화·재봉인·replay 유지 |
+| S7 retention lifecycle (FR-804 / AC-802) | Satisfied | `pruneEvidenceBundle`, `spear evidence prune`, `test/evidence.test.ts` — body digest화·재봉인·replay 유지. **만료 강제**: `retentionDue`/`prune --if-expired`(경과 전·이미 pruned면 no-op, 멱등), 설정 가능 창 `--retention-days`/`run project` |
 | S8 finding lineage diff (FR-908 / AC-905) | Satisfied | `diffFindings`(build-불변 lineageId), `spear diff --findings`, `test/report.test.ts` |
 
 ## Review findings disposition
@@ -173,4 +178,4 @@ handoff Critical(#1·#2·#3)과 High(#4–#9)는 모두 해소되었다(위 표 
 - browser/WebSocket/gRPC/queue runtime discovery, agent/MCP·race/parser family
 - live target을 재공격하는 CI deterministic replay(현재 `replay`는 offline verdict 재계산)
 - HTTP 동시성(S4 paired/maxConcurrency 강제), stateful extraction(CSRF/object-id),
-  browser/DB audit witness(FR-506), canary-egress oracle
+  browser/DB audit witness(FR-506)

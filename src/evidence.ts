@@ -37,8 +37,15 @@ function sanitizedProgram(
   program: CausalHttpAttackProgram,
 ): CausalHttpAttackProgram {
   const clone = structuredClone(program);
+  // Tokens that must not survive anywhere in the stored program (oracle config
+  // AND the attack payloads that carry them, e.g. a probe URL in a request body).
+  const tokens: string[] = [];
   if (clone.oracle.kind === 'response-contains') {
     clone.oracle.value = '[CANARY]';
+  }
+  if (clone.oracle.kind === 'canary-egress') {
+    tokens.push(clone.oracle.canary);
+    clone.oracle.canary = '[CANARY]';
   }
   for (const sequence of [
     clone.execution.baseline,
@@ -52,6 +59,11 @@ function sanitizedProgram(
             request.headers[name] = '[REDACTED]';
           }
         }
+      }
+      for (const token of tokens) {
+        if (!token) continue;
+        request.path = request.path.split(token).join('[CANARY]');
+        if (request.body !== undefined) request.body = request.body.split(token).join('[CANARY]');
       }
     }
   }
@@ -129,13 +141,19 @@ function bundleContent(
   return clone as Omit<UnsignedEvidenceBundle, 'bundleDigest'>;
 }
 
+export const DEFAULT_RETENTION_DAYS = 30;
+
 export function createEvidenceBundle(
   run: CausalRunResult,
   program: CausalHttpAttackProgram,
   signingKey: EvidenceSigningKey,
   now = new Date(),
   minimizedGraphPath?: string[],
+  retentionDays = DEFAULT_RETENTION_DAYS,
 ): EvidenceBundle {
+  if (!Number.isFinite(retentionDays) || retentionDays <= 0) {
+    throw new SpearExecutionError('retentionDays must be a positive number');
+  }
   verifyReceiptChain(allEvents(run));
   const safeProgram = sanitizedProgram(program);
   const finding = findingFor(run, program, minimizedGraphPath);
@@ -161,15 +179,17 @@ export function createEvidenceBundle(
     replayCommand: 'spear replay --bundle <bundle.json> --trust-store <file>',
     redactionManifest: [
       { field: 'attackProgram.oracle.value', action: 'replaced' },
+      { field: 'attackProgram.oracle.canary + payloads carrying it', action: 'replaced' },
       { field: 'run.*.observations.body canaries', action: 'replaced' },
       { field: 'request authorization/cookie headers', action: 'removed' },
       { field: 'run.*.beforeState/afterState raw snapshots', action: 'digested' },
       { field: 'raw witness payloads', action: 'digested' },
     ],
     retention: {
-      // Redacted response bodies expire after 30 days; replay uses only the
-      // sealed predicate flags, so a pruned bundle still verifies and replays.
-      rawExpiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      // Redacted response bodies expire after the retention window; replay uses
+      // only the sealed predicate flags, so a pruned bundle still verifies and
+      // replays. `spear evidence prune --if-expired` enforces this window.
+      rawExpiresAt: new Date(now.getTime() + retentionDays * 24 * 60 * 60 * 1000).toISOString(),
       grade: 'full',
     },
   };
@@ -199,12 +219,24 @@ function sealBundle(
  * bundle still verifies and replays because replay uses the sealed predicate
  * flags, not the raw bodies. Finding ID and lineage are preserved.
  */
+/**
+ * Whether a bundle still holds raw (redactable) artifacts and its retention
+ * window has elapsed as of `now` — i.e. `prune --if-expired` should act.
+ */
+export function retentionDue(bundle: EvidenceBundle, now = new Date()): boolean {
+  return bundle.retention.grade === 'full'
+    && Date.parse(bundle.retention.rawExpiresAt) <= now.getTime();
+}
+
 export function pruneEvidenceBundle(
   value: unknown,
   trustStore: unknown,
   signingKey: EvidenceSigningKey,
 ): EvidenceBundle {
   const bundle = verifyEvidenceBundle(value, trustStore);
+  // Idempotent: a redacted-only bundle has no raw bodies left to digest, so
+  // re-pruning would only double-digest already-digested values.
+  if (bundle.retention.grade === 'redacted-only') return bundle;
   const pruned = structuredClone(bundle) as Partial<EvidenceBundle> & { run: EvidenceBundle['run'] };
   const digestBody = (receipt: EvidenceBundle['run']['baseline']): void => {
     for (const observation of receipt.observations) {

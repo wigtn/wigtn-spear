@@ -16,12 +16,14 @@ import {
   pruneEvidenceBundle,
   renderEvidenceMarkdown,
   replayEvidenceBundle,
+  retentionDue,
   verifyEvidenceBundle,
   verifyFix,
 } from './evidence.js';
 import { buildCampaignReport, renderReportMarkdown } from './report.js';
 import { runCausalHttpAttack } from './http-runner.js';
 import { minimizeCausalProgram } from './minimizer.js';
+import { oracleStatePaths } from './oracle.js';
 import { AttackTwin, ConstantStateController, type StateController } from './twin.js';
 import { HttpControlStateController } from './control-channel.js';
 import {
@@ -135,16 +137,22 @@ Active causal run (emits a signed evidence bundle):
                     --inventory <file> --registry <file> --policy <file>
                     --program <file> --twin <file>
                     --evidence-private-key <file> --evidence-key-id <id>
-                    --acknowledge-authorization [--minimize] [--output <bundle.json>]
-    response-contains oracles run with a constant Twin; state-path oracles
-    require twin.control (resetUrl/snapshotUrl) on an owned IP-literal origin.
+                    --acknowledge-authorization [--minimize]
+                    [--retention-days <n>] [--output <bundle.json>]
+    response-only oracles (response-contains, differential-access) run with a
+    constant Twin; state-observing oracles (state-path-increased/-decreased/
+    -changed/-delta-exceeds, partial-effect, canary-egress) require twin.control
+    (resetUrl/snapshotUrl) on an owned IP-literal origin.
     --minimize drops attack steps that are not required for the proven predicate.
 
 Evidence (signed causal bundles):
   spear evidence verify --bundle <file> --trust-store <file> [--output <file>]
   spear evidence render --bundle <file> --trust-store <file> [--output <file>]
   spear evidence prune --bundle <file> --trust-store <file>
-                       --evidence-private-key <file> --evidence-key-id <id> [--output <file>]
+                       --evidence-private-key <file> --evidence-key-id <id>
+                       [--if-expired] [--output <file>]
+    --if-expired only prunes once the retention window has elapsed (and is a
+    no-op on an already-pruned bundle), so it is safe to run on a schedule.
   spear replay --bundle <file> --trust-store <file> [--output <file>]
   spear verify-fix --original <bundle> --fixed <bundle> --trust-store <file>
                    [--benign-utility-passed] [--output <file>]
@@ -374,13 +382,16 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     const program = validateCausalHttpAttackProgram(programInput);
     const twinDefinition = twinInput as TwinDefinition;
     let controller: StateController;
-    if (program.oracle.kind === 'response-contains') {
+    // An oracle needs the owned control channel iff it observes state paths;
+    // response-only oracles (response-contains, differential-access) run against
+    // a constant Twin.
+    if (oracleStatePaths(program.oracle).length === 0) {
       controller = new ConstantStateController();
     } else {
       const control = twinDefinition.control;
       if (!control) {
         throw new Error(
-          'state-path oracle requires an owned Twin control channel; add twin.control '
+          'state-observing oracle requires an owned Twin control channel; add twin.control '
           + '(resetUrl/snapshotUrl) and verify it first with `spear twin prepare`',
         );
       }
@@ -408,12 +419,20 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       );
       minimizedGraphPath = minimized.graphPath;
     }
+    const retentionDaysOption = parsed.options.get('retention-days');
+    const retentionDays = typeof retentionDaysOption === 'string'
+      ? Number(retentionDaysOption)
+      : undefined;
+    if (retentionDays !== undefined && (!Number.isFinite(retentionDays) || retentionDays <= 0)) {
+      throw new Error('--retention-days must be a positive number');
+    }
     const bundle = createEvidenceBundle(
       run,
       program,
       { privateKeyPem: evidenceKeyPem, keyId: requiredOption(parsed, 'evidence-key-id') },
       new Date(),
       minimizedGraphPath,
+      retentionDays,
     );
     await emit(bundle, parsed);
     if (run.disposition === 'proven') return 1;
@@ -441,6 +460,21 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       readJsonFile<unknown>(requiredOption(parsed, 'bundle')),
       readJsonFile<unknown>(requiredOption(parsed, 'trust-store')),
     ]);
+    // --if-expired makes prune a safe cron/CI no-op until the retention window
+    // elapses (and on an already-pruned bundle), so it needs no signing key to run.
+    const verified = verifyEvidenceBundle(bundle, trustStore);
+    if (verified.retention.grade === 'redacted-only') {
+      process.stderr.write('Bundle is already redacted-only; no changes.\n');
+      await emit(verified, parsed);
+      return 0;
+    }
+    if (parsed.options.get('if-expired') === true && !retentionDue(verified)) {
+      process.stderr.write(
+        `Retention window not elapsed (raw expires ${verified.retention.rawExpiresAt}); no changes.\n`,
+      );
+      await emit(verified, parsed);
+      return 0;
+    }
     const evidenceKeyPem = await readFile(
       resolve(requiredOption(parsed, 'evidence-private-key')),
       'utf8',
