@@ -139,7 +139,7 @@ digest), #5 (surface inventory signature), #6-#9, Medium #11-#14.
 
 | 항목 | Status | Evidence |
 |---|---|---|
-| S1 finding-state schema + `report` (FR-704·706·707 / AC-702·703) | Satisfied | `src/report.ts`, `spear report`, `test/report.test.ts` — proven/candidate/rejected/flaky/error 분리, coverage-first, `secureVerdict:false`, redaction |
+| S1 finding-state schema + `report` (FR-704·706·707 / AC-702·703) | Satisfied | `src/report.ts`, `spear report`, `test/report.test.ts` — proven/candidate/rejected/flaky/error 분리, coverage-first, `secureVerdict:false`, redaction. **coverageSummary**: 상태별 count + `attackableUnexercised`(compatible pack·witness 준비됐지만 아직 안 친 surface = 다음 공격 to-do, bundle carrier↔surface entryPoint 매칭) |
 | S2 replay threshold 강제 (FR-603 / AC-601·602) | Satisfied | `validateCausalHttpAttackProgram`(deterministic all-success·nondeterministic 3/2), `test/replay-threshold.test.ts` |
 | S3 causal minimizer (FR-604 / AC-603) | Satisfied | `src/minimizer.ts`, `run project --minimize`, `test/minimizer.test.ts` — 불필요 step 제거·predicate 유지·attack 비움 금지 |
 | S7 retention lifecycle (FR-804 / AC-802) | Satisfied | `pruneEvidenceBundle`, `spear evidence prune`, `test/evidence.test.ts` — body digest화·재봉인·replay 유지. **만료 강제**: `retentionDue`/`prune --if-expired`(경과 전·이미 pruned면 no-op, 멱등), 설정 가능 창 `--retention-days`/`run project` |

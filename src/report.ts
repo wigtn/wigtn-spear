@@ -5,6 +5,7 @@ import type {
   CampaignReport,
   CandidateFinding,
   CoverageReport,
+  CoverageState,
   EvidenceBundle,
   RunSummary,
 } from './types.js';
@@ -51,10 +52,15 @@ export function buildCampaignReport(
     },
     findings: { proven: [], candidate: [...candidates], rejected: [], flaky: [], error: [] },
     secureVerdict: false,
+    coverageSummary: { byState: {}, attackableUnexercised: [] },
     bundleRefs: [],
   };
+  // Every entry point a verified bundle actually drove, to reconcile against the
+  // attackable-but-unexercised surfaces below.
+  const exercisedEntryPoints = new Set<string>();
   for (const input of bundleInputs) {
     const bundle = verifyEvidenceBundle(input, trustStore);
+    exercisedEntryPoints.add(bundle.attackProgram.carrier.entryPoint);
     report.bundleRefs.push({
       ...(bundle.finding ? { findingId: bundle.finding.findingId } : {}),
       runId: bundle.run.runId,
@@ -76,6 +82,17 @@ export function buildCampaignReport(
         break;
     }
   }
+  const byState: Partial<Record<CoverageState, number>> = {};
+  for (const cell of report.coverage.ledger) {
+    byState[cell.state] = (byState[cell.state] ?? 0) + 1;
+  }
+  report.coverageSummary = {
+    byState,
+    attackableUnexercised: report.coverage.ledger
+      .filter((cell) => cell.state === 'attackable' && !exercisedEntryPoints.has(cell.surface.entryPoint))
+      .map((cell) => cell.surface.id)
+      .sort(),
+  };
   assertNoRawSecrets(report);
   return report;
 }
@@ -98,6 +115,21 @@ export function renderReportMarkdown(report: CampaignReport): string {
       `| \`${cell.surface.id}\` | ${cell.surface.protocol} | ${cell.state} `
       + `| ${cell.evidenceGrade} | ${cell.applicablePackIds.join(', ') || '—'} |`,
     );
+  }
+  const stateRollup = Object.entries(report.coverageSummary.byState)
+    .map(([state, count]) => `${state}: ${count}`)
+    .join(', ');
+  lines.push('', '## Coverage summary', '', `- Surfaces by state: ${stateRollup || 'none'}`);
+  const unexercised = report.coverageSummary.attackableUnexercised;
+  if (unexercised.length > 0) {
+    lines.push(
+      '',
+      '### Attackable, not yet exercised',
+      '',
+      'These surfaces have a compatible pack and ready witnesses but no evidence bundle — attack these next.',
+      '',
+    );
+    for (const id of unexercised) lines.push(`- \`${id}\``);
   }
   if (report.coverage.blindSpots.length > 0) {
     lines.push('', '## Blind spots', '');

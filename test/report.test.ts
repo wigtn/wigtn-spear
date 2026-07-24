@@ -106,10 +106,20 @@ test('campaign report separates finding states, keeps coverage first, and never 
   assert.ok(report.findings.proven[0]!.lineageId.startsWith('lineage-'));
   assert.ok(report.coverage.ledger.length > 0);
 
+  // The lone operator surface is attackable but no bundle drove it (the bundles
+  // exercised /items/{id}, not /operator-only) — it is the actionable to-do.
+  assert.deepEqual(report.coverageSummary.byState, { attackable: 1 });
+  const operatorSurface = report.coverage.ledger.find(
+    (cell) => cell.surface.entryPoint === '/operator-only',
+  );
+  assert.deepEqual(report.coverageSummary.attackableUnexercised, [operatorSurface!.surface.id]);
+
   const md = renderReportMarkdown(report);
   assert.ok(!md.includes(CANARY_A), 'no raw canary in report');
   assert.match(md, /secure verdict: none/u);
   assert.match(md, /## Coverage ledger/u);
+  assert.match(md, /## Coverage summary/u);
+  assert.match(md, /Attackable, not yet exercised/u);
   assert.match(md, /## Candidates/u);
 });
 

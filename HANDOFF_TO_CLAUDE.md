@@ -170,6 +170,14 @@
   - **race pack**: 결정적 concurrent 실행 + FR-307 fault schedule + containment attestation.
   - **adaptive search(FR-407)·real-target 검증(Phase 5)**: PRD Go-gate 대상.
 
+- **2026-07-25 campaign report에 coverage↔evidence 교차 참조 추가 (`npm run check`: 101 passed).**
+  - report가 coverage ledger와 evidence bundle을 각각 보여주기만 하고 교차 참조가 없던 것 개선.
+    `CampaignReport.coverageSummary`: (1) 상태별 surface count(`byState`), (2) `attackableUnexercised`
+    — state='attackable'인데 어떤 verified bundle도 안 친 surface id(bundle `attackProgram.carrier.entryPoint`
+    ↔ `surface.entryPoint` 매칭). red-team "다음에 칠 것" to-do.
+  - `renderReportMarkdown`에 "## Coverage summary" + "Attackable, not yet exercised" 섹션.
+    `test/report.test.ts` 확장(byState·attackableUnexercised·markdown 검증).
+
 - **2026-07-25 HAR discovery 매퍼 추가 (`npm run check`: 101 passed).**
   - 정적 descriptor 매퍼(OpenAPI/Next/Supabase/GraphQL)에 이어 **캡처 트래픽(HAR)** 매퍼.
     브라우저 devtools·프록시 export → 공격표면. red-team 워크플로(실트래픽 → surface)에 부합.
