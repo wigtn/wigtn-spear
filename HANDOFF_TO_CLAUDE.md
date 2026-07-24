@@ -170,6 +170,21 @@
   - **race pack**: 결정적 concurrent 실행 + FR-307 fault schedule + containment attestation.
   - **adaptive search(FR-407)·real-target 검증(Phase 5)**: PRD Go-gate 대상.
 
+- **2026-07-25 stacked PR mis-merge 복구 + 브랜치 정리.** PR #4~#7이 auto-retarget 실패로
+  중간 브랜치에만 머지되어 main엔 #3까지만 반영됐던 것을 단일 PR #8로 main에 통합(96 tests).
+  이후 모든 dangling 브랜치 삭제 → 원격·로컬 main만 남김. **교훈: stacked PR는 머지 시
+  head 브랜치 삭제 체크해야 GitHub가 다음 PR base를 자동 재지정.**
+
+- **2026-07-25 `response-field-present` oracle + excessive-data-exposure family (`npm run check`: 98 passed).**
+  - FR-504/OWASP API3(BOPLA 읽기측): 응답이 principal이 봐선 안 되는 필드를 구조적으로 노출하면
+    forbidden. **JSON path 존재**로 판정 → 비밀 값을 몰라도 누출 탐지(값은 redaction). mass-assignment
+    (쓰기측)의 읽기측 대응.
+  - `types.ts`(`response-field-present` requestId/jsonPath, http-gateway witness), `oracle.ts`
+    (`parseJson`+getPath 존재, 2xx 요구; `oracleStatePaths` `[]`), `validation.ts` 검증.
+  - fixture: `/account` route가 `?include=secret` selector를 vuln 모드에서만 존중해 `apiKey`
+    (=`ACCOUNT_SECRET` 캐너리) 노출. baseline/counterfactual은 selector 없어 필드 부재.
+    `test/excessive-data-exposure.test.ts` proven/rejected + secret redaction 검증.
+
 - **2026-07-24 PR #2 머지 후 `differential-access` oracle 추가 (`npm run check`: 89 passed).**
   - S6/FR-507/AC-504: 두 principal이 같은 operation을 발행해 unprivileged가 privileged와
     **동일한 2xx 응답**을 얻으면 forbidden(authz 발산, BFLA). canary·상태변화 없이 응답 동치만으로

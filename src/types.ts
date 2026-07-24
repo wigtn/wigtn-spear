@@ -407,6 +407,16 @@ export type CausalOracle =
     witness: string;
     sinkPath: string;
     canary: string;
+  }
+  | {
+    // Excessive data exposure (FR-504, OWASP API3 / BOPLA read side): a response
+    // structurally exposes a field the principal must not receive. Keys on the
+    // JSON path's *presence*, so it detects the leak without knowing the secret
+    // value (which stays redacted in the stored observation).
+    kind: 'response-field-present';
+    witness: 'http-gateway';
+    requestId: string;
+    jsonPath: string;
   };
 
 export interface HttpSequenceSpec {

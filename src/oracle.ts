@@ -64,6 +64,23 @@ export function evaluateOracle(oracle: CausalOracle, ctx: OracleContext): boolea
       const seenBefore = typeof before === 'string' && before.includes(oracle.canary);
       return seenAfter && !seenBefore;
     }
+    case 'response-field-present': {
+      // The response structurally exposes a forbidden field — detected by the
+      // JSON path's presence, independent of its (redacted) value.
+      const observation = ctx.observations.find((item) => item.requestId === oracle.requestId);
+      if (observation === undefined || !is2xx(observation.status)) return false;
+      const parsed = parseJson(observation.body);
+      return parsed !== undefined && getPath(parsed, oracle.jsonPath) !== undefined;
+    }
+  }
+}
+
+function parseJson(body: string): Record<string, unknown> | undefined {
+  try {
+    const value: unknown = JSON.parse(body);
+    return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -82,6 +99,7 @@ export function oracleStatePaths(oracle: CausalOracle): string[] {
   switch (oracle.kind) {
     case 'response-contains':
     case 'differential-access':
+    case 'response-field-present':
       return [];
     case 'partial-effect':
       return [oracle.committedPath, oracle.rolledBackPath];
