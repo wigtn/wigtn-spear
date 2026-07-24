@@ -325,6 +325,19 @@ export class HttpFixture implements StateController {
       return this.#json(res, 200, { me: body });
     }
 
+    // CORS misconfiguration (FR-504): the endpoint reflects the request Origin
+    // into Access-Control-Allow-Origin with credentials. Vulnerable mode reflects
+    // ANY origin (so an attacker origin is trusted); fixed mode only reflects an
+    // allow-listed origin. The signal lives in the response headers, not the body.
+    if (req.method === 'GET' && url.pathname === '/data') {
+      const origin = typeof req.headers['origin'] === 'string' ? req.headers['origin'] : '';
+      const reflect = this.vulnerable ? origin !== '' : origin === 'https://trusted.app';
+      const headers = reflect
+        ? { 'access-control-allow-origin': origin, 'access-control-allow-credentials': 'true' }
+        : {};
+      return this.#json(res, 200, { data: 'ok' }, headers);
+    }
+
     if (req.method === 'GET' && url.pathname === '/health') {
       return this.#json(res, 200, { ok: true });
     }
@@ -346,11 +359,17 @@ export class HttpFixture implements StateController {
     return this.#json(res, 404, { error: 'not-found' });
   }
 
-  #json(res: ServerResponse, status: number, body: unknown): void {
+  #json(
+    res: ServerResponse,
+    status: number,
+    body: unknown,
+    extraHeaders: Record<string, string> = {},
+  ): void {
     const payload = JSON.stringify(body);
     res.writeHead(status, {
       'content-type': 'application/json',
       'content-length': Buffer.byteLength(payload),
+      ...extraHeaders,
     });
     res.end(payload);
   }

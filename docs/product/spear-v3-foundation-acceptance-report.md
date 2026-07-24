@@ -12,7 +12,7 @@
 ```text
 $ npm run check
 typecheck: passed
-tests: 101 passed, 0 failed
+tests: 103 passed, 0 failed
 ```
 
 추가 smoke evidence:
@@ -94,6 +94,7 @@ fixed=rejected로 실증한다. 각각 disposable fixture + independent witness�
 | SSRF outbound canary egress | `canary-egress` (owned sink sees the exact token) | `test/canary-egress.test.ts` |
 | Audit-log tampering (anti-forensics) | `state-path-decreased` (monotonic violation) | `test/audit-tampering.test.ts` |
 | Excessive data exposure (BOPLA read, API3) | `response-field-present` (field structurally leaked) | `test/excessive-data-exposure.test.ts` |
+| CORS misconfiguration (reflected origin) | `response-header-contains` (ACAO reflects attacker) | `test/cors-misconfig.test.ts` |
 
 oracle 평가는 `src/oracle.ts`로 분리(`evaluateOracle`), state diff의 비숫자 값은
 digest로 redaction(Critical #3 / PRD 리뷰 m-6). oracle 종류: `response-contains`,
@@ -106,7 +107,8 @@ underflow·롤백, `test/audit-tampering.test.ts`), `state-path-delta-exceeds`, 
 egress로 SSRF 증명, sink 값은 digest redaction, `test/canary-egress.test.ts`, FR-504/FR-810),
 `response-field-present`(응답이 금지 필드를 구조적으로 노출 — 값을 몰라도 JSON path 존재로
 excessive data exposure 검출, 값은 redaction, `test/excessive-data-exposure.test.ts`,
-FR-504/OWASP API3).
+FR-504/OWASP API3), `response-header-contains`(응답 헤더에 금지 값 — CORS 오설정 반영 origin·
+open redirect·헤더 인젝션, `test/cors-misconfig.test.ts`, FR-504).
 
 이 4개 외 family(GraphQL/WS/gRPC, path/command, agent/MCP/memory, race/parser 등)는
 동일 계약(signed pack·applicability·fixture·witness·baseline/attack/counterfactual·

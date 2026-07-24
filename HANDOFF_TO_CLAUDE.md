@@ -170,6 +170,15 @@
   - **race pack**: 결정적 concurrent 실행 + FR-307 fault schedule + containment attestation.
   - **adaptive search(FR-407)·real-target 검증(Phase 5)**: PRD Go-gate 대상.
 
+- **2026-07-25 `response-header-contains` oracle + CORS misconfig family (`npm run check`: 103 passed).**
+  - 응답 헤더에 금지 값이 있으면 forbidden(FR-504). CORS 오설정(공격자 Origin이 ACAO에 반영)·
+    open redirect(Location에 외부 host)·헤더 인젝션 커버. 헤더명 case-insensitive, 값 substring.
+  - `types.ts`/`oracle.ts`(observation.headers 조회)/`validation.ts`. `oracleStatePaths` `[]`.
+  - fixture: `#json`에 extraHeaders 파라미터 추가, `/data` route가 Origin을 vuln 모드에선 무조건,
+    fixed 모드에선 allowlist(`https://trusted.app`)만 ACAO에 반영. 공격 request는 `origin` 헤더
+    주입(FORBIDDEN_HEADERS에 없음). counterfactual은 trusted origin이라 미반영.
+  - `test/cors-misconfig.test.ts` proven(attacker origin 반영)/rejected(allowlist만).
+
 - **2026-07-25 campaign report에 coverage↔evidence 교차 참조 추가 (`npm run check`: 101 passed).**
   - report가 coverage ledger와 evidence bundle을 각각 보여주기만 하고 교차 참조가 없던 것 개선.
     `CampaignReport.coverageSummary`: (1) 상태별 surface count(`byState`), (2) `attackableUnexercised`

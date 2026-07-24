@@ -140,7 +140,8 @@ Active causal run (emits a signed evidence bundle):
                     --acknowledge-authorization [--minimize]
                     [--retention-days <n>] [--output <bundle.json>]
     response-only oracles (response-contains, differential-access,
-    response-field-present) run with a constant Twin; state-observing oracles
+    response-field-present, response-header-contains) run with a constant Twin;
+    state-observing oracles
     (state-path-increased/-decreased/
     -changed/-delta-exceeds, partial-effect, canary-egress) require twin.control
     (resetUrl/snapshotUrl) on an owned IP-literal origin.
@@ -387,7 +388,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     let controller: StateController;
     // An oracle needs the owned control channel iff it observes state paths;
     // response-only oracles (response-contains, differential-access,
-    // response-field-present) run against
+    // response-field-present, response-header-contains) run against
     // a constant Twin.
     if (oracleStatePaths(program.oracle).length === 0) {
       controller = new ConstantStateController();
