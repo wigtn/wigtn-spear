@@ -40,7 +40,8 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - 지원 attack family: BOLA, BFLA, mass assignment(BOPLA), SSRF→owned canary sink,
   idempotency 중복효과, config 변경, 비원자 partial-effect, workflow step-skip,
   cache poisoning, GraphQL BOLA, differential authz(canary·상태변화 없이 두 principal
-  응답 동치로 BFLA 검출) — 각각 vulnerable/fixed fixture로 proven/rejected 실증
+  응답 동치로 BFLA 검출), SSRF canary-egress(owned sink이 정확한 토큰 관측) — 각각
+  vulnerable/fixed fixture로 proven/rejected 실증
 
 **증거·수명주기**
 
@@ -54,7 +55,7 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - browser/WebSocket/gRPC/queue runtime 자동 mapping
 - agent tool/MCP/memory, race/parser/cloud 등 추가 attack family
 - live target을 재공격하는 CI deterministic replay
-- HTTP 동시성(paired/maxConcurrency 강제), canary-egress·browser/DB audit oracle
+- HTTP 동시성(paired/maxConcurrency 강제), browser/DB audit witness oracle
 
 `지원`이라고 부르려면 signed pack · applicability · vulnerable/fixed fixture ·
 independent witness · baseline/attack/counterfactual · replay threshold ·

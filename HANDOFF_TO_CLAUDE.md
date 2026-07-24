@@ -187,6 +187,18 @@
   - **WebSocket e2e는 명시적 defer**(owner 결정, 2026-07-24). `ws` dev 의존성 + undici WS pinnable
     dispatcher(M-4) 선행.
 
+- **2026-07-24 `canary-egress` oracle 추가 (`npm run check`: 91 passed).**
+  - FR-504/FR-810: owned sink이 **정확한 run-scoped canary 토큰**을 관측했으면 forbidden.
+    기존 SSRF는 `state-path-increased`(canarySinkHits 카운터)로 우회 — "카운터가 늘었다"만
+    보증, 무관 트래픽 false-positive 가능. canary-egress는 그 토큰이 실제 egress됐음을 증명.
+  - `types.ts`에 `canary-egress`(sinkPath/canary) 추가. `oracle.ts` `evaluateOracle`:
+    after의 sinkPath 값이 canary 포함 && before는 미포함. `oracleStatePaths`는 `[sinkPath]`.
+    `validation.ts` 검증(sinkPath/canary/witness string).
+  - fixture: `#canarySink` state 추가(`#state()`/`reset()` 반영), `/fetch` vulnerable이 probe
+    URL을 sink에 기록. `CANARY_EGRESS` 상수. sink 값은 비숫자라 allowlistedStateDiff에서
+    digest redaction → raw canary 미저장(테스트로 `!JSON.stringify(run).includes(CANARY_EGRESS)` 검증).
+  - `test/canary-egress.test.ts`: proven(vuln)/rejected(fixed).
+
 - **2026-07-24 Step D: Next.js/Supabase passive discovery 매퍼 (`npm run check`: 67 passed).**
   - `src/discovery.ts`: `surfacesFromNextRoutes`(route-handler/server-action/middleware),
     `surfacesFromSupabase`(table+RLS flag→rls-disabled state dep, storage bucket),

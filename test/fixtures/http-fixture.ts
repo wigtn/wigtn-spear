@@ -4,6 +4,8 @@ import type { StateController } from '../../src/twin.js';
 
 export const CANARY_USER_A = 'CANARY_USER_A_7F4C';
 export const CANARY_USER_B = 'CANARY_USER_B_2A11';
+/** An owned egress-canary token embedded in the SSRF probe URL. */
+export const CANARY_EGRESS = 'CANARY_EGRESS_9D3E';
 
 interface FixtureItem {
   id: string;
@@ -33,6 +35,7 @@ export class HttpFixture implements StateController {
   #reindexCount = 0;
   #adminCount = 0;
   #canarySinkHits = 0;
+  #canarySink = '';
   #orderCount = 0;
   #configValue = 'initial';
   #debitTotal = 0;
@@ -100,6 +103,7 @@ export class HttpFixture implements StateController {
       reindexCount: this.#reindexCount,
       adminCount: this.#adminCount,
       canarySinkHits: this.#canarySinkHits,
+      canarySink: this.#canarySink,
       orderCount: this.#orderCount,
       configValue: this.#configValue,
       debitTotal: this.#debitTotal,
@@ -117,6 +121,7 @@ export class HttpFixture implements StateController {
     this.#reindexCount = 0;
     this.#adminCount = 0;
     this.#canarySinkHits = 0;
+    this.#canarySink = '';
     this.#orderCount = 0;
     this.#configValue = 'initial';
     this.#debitTotal = 0;
@@ -198,7 +203,10 @@ export class HttpFixture implements StateController {
       const body = await this.#readJsonBody(req);
       const requested = typeof body.url === 'string' ? body.url : '';
       if (!this.vulnerable) return this.#json(res, 403, { error: 'ssrf-blocked' });
-      if (requested) this.#canarySinkHits += 1; // the owned canary sink observed a hit
+      if (requested) {
+        this.#canarySinkHits += 1; // the owned canary sink observed a hit
+        this.#canarySink = requested; // ...carrying whatever token the probe URL held
+      }
       return this.#json(res, 200, { fetched: Boolean(requested) });
     }
 

@@ -262,9 +262,12 @@ actor만 바꾼 paired에서 differential. (AC-505는 FR-307 편입 후.)
 구현 완료. **`differential-access` 구현 완료** — paired 동시 실행 없이 한 attack sequence
 안에서 `asPrincipalId`로 privileged/unprivileged 두 요청을 발행하고 응답 동치를 판정한다
 (순차라 결정적, replay 안전). vulnerable/fixed `/admin/report` fixture로 proven/rejected 실증
-(`test/differential-oracle.test.ts`, AC-504/FR-507). `canary-egress`와 browser/DB audit
-witness(FR-506)는 미구현. S4 concurrency semaphore는 현재 sequence가 순차라 never-triggers여서
-가치 낮음 → paired race family 착수 시 함께.
+(`test/differential-oracle.test.ts`, AC-504/FR-507). **`canary-egress` 구현 완료** — owned
+sink이 정확한 run-scoped 토큰을 관측했는지 판정(카운터 증가가 아닌 실제 egress). sink 값은
+digest redaction(raw canary 미저장), vulnerable/fixed `/fetch` fixture로 proven/rejected
+(`test/canary-egress.test.ts`, FR-504/FR-810). browser/DB audit witness(FR-506)는 미구현.
+S4 concurrency semaphore는 현재 sequence가 순차라 never-triggers여서 가치 낮음 → paired race
+family 착수 시 함께.
 
 ---
 

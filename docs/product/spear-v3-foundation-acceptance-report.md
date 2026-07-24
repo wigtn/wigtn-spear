@@ -12,7 +12,7 @@
 ```text
 $ npm run check
 typecheck: passed
-tests: 89 passed, 0 failed
+tests: 91 passed, 0 failed
 ```
 
 추가 smoke evidence:
@@ -91,13 +91,16 @@ fixed=rejected로 실증한다. 각각 disposable fixture + independent witness�
 | Workflow step-skip (ship without pay) | state-path `unpaidShipments` | `test/workflow-cache.test.ts` |
 | Cache poisoning (cross-tenant cached body) | response-contains + per-request principal | `test/workflow-cache.test.ts` |
 | Differential authz (BFLA, no marker) | `differential-access` (response equivalence) | `test/differential-oracle.test.ts` |
+| SSRF outbound canary egress | `canary-egress` (owned sink sees the exact token) | `test/canary-egress.test.ts` |
 
 oracle 평가는 `src/oracle.ts`로 분리(`evaluateOracle`), state diff의 비숫자 값은
 digest로 redaction(Critical #3 / PRD 리뷰 m-6). oracle 종류: `response-contains`,
 `state-path-increased`, `state-path-delta-exceeds`, `state-path-changed`,
 `partial-effect`(비원자 commit 후 부분 효과, `test/oracle-families.test.ts`, AC-505/FR-509),
 `differential-access`(두 principal 응답 동치로 authz 발산 검출, canary·상태변화 불요,
-`test/differential-oracle.test.ts`, AC-504/FR-507).
+`test/differential-oracle.test.ts`, AC-504/FR-507),
+`canary-egress`(owned sink이 정확한 run-scoped 토큰을 관측 — 카운터 증가가 아닌 실제 토큰
+egress로 SSRF 증명, sink 값은 digest redaction, `test/canary-egress.test.ts`, FR-504/FR-810).
 
 이 4개 외 family(GraphQL/WS/gRPC, path/command, agent/MCP/memory, race/parser 등)는
 동일 계약(signed pack·applicability·fixture·witness·baseline/attack/counterfactual·
@@ -173,4 +176,4 @@ handoff Critical(#1·#2·#3)과 High(#4–#9)는 모두 해소되었다(위 표 
 - browser/WebSocket/gRPC/queue runtime discovery, agent/MCP·race/parser family
 - live target을 재공격하는 CI deterministic replay(현재 `replay`는 offline verdict 재계산)
 - HTTP 동시성(S4 paired/maxConcurrency 강제), stateful extraction(CSRF/object-id),
-  browser/DB audit witness(FR-506), canary-egress oracle
+  browser/DB audit witness(FR-506)
