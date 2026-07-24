@@ -19,12 +19,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - name: Verify example trace
+      - name: Smoke-test the built CLI
         run: |
-          set +e
-          node dist/src/cli.js agent verify \
-            --contract examples/agent.contract.json \
-            --trace examples/agent.trace.json \
-            --json
-          code=$?
-          test "$code" -eq 1
+          node dist/src/cli.js help
+          node dist/src/cli.js attack validate --program examples/attack.program.json

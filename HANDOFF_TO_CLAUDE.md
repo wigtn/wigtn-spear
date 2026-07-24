@@ -161,6 +161,10 @@
 - **자율 구현이 남은 나머지 (owner 결정/인프라 필요):**
   - **WebSocket/gRPC**: Node 내장 WebSocket은 client-only(WS **server** 없음) → `ws`/protobuf
     의존성 결정 필요. (이제 undici 있으니 WS client pinning은 가능하나 테스트용 WS server가 없음.)
+    - **2026-07-24 결정: WebSocket e2e 실증은 명시적으로 다음으로 defer.** causal 엔진은
+      HTTP/GraphQL로 이미 재사용 가능하므로 transport(연결·메시지)만 남았지만, fixture용 WS
+      server(`ws` dev 의존성)와 undici WebSocket pinnable dispatcher 편입(M-4)이 선행 조건.
+      우선순위 낮음 — owner가 재개 지시할 때 착수.
   - **injection/process pack(S11)**: FR-309 sandbox(rootless container) 인프라 선행 필요.
   - **compound agent/MCP/memory(Phase 4, FR-451~463)**: agent runtime/LLM 통합 필요.
   - **race pack**: 결정적 concurrent 실행 + FR-307 fault schedule + containment attestation.
