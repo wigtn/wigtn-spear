@@ -12,7 +12,7 @@
 ```text
 $ npm run check
 typecheck: passed
-tests: 106 passed, 0 failed
+tests: 109 passed, 0 failed
 ```
 
 추가 smoke evidence:
@@ -48,7 +48,7 @@ Twin `StateController`(in-process reset/snapshot 제어 채널)를 겸한다.
 | `AC-102` | Satisfied | `src/authorization.ts:33-35`, `test/authorization.test.ts:39-48` | production active run은 method/capability 분기 전에 거부 |
 | `AC-103` | Satisfied | `src/authorization.ts:37-62`, `src/crypto.ts`, `test/authorization.test.ts:25-76` | unknown/revoked/tampered/expired/out-of-scope capability 검증 |
 | `AC-104` | Satisfied | `src/run.ts:64-80`, `test/run-cli.test.ts:19-42` | preview artifact에 manifest/build/registry digest 기록 |
-| `AC-204` | Partially satisfied | `src/discovery.ts`, `test/framework-mappers.test.ts`, `test/graphql.test.ts` | operator + OpenAPI + Next.js + Supabase + GraphQL(query/mutation) 정적 descriptor 매퍼 + HAR(캡처 트래픽, path id 템플릿화·병합) 매퍼. GraphQL은 HTTP runner로 실제 공격까지(BOLA E2E). browser/WS/gRPC/queue runtime discovery는 아직 없음 |
+| `AC-204` | Partially satisfied | `src/discovery.ts`, `test/framework-mappers.test.ts`, `test/graphql.test.ts` | operator + OpenAPI + Next.js + Supabase + GraphQL(query/mutation) 정적 descriptor 매퍼 + HAR(캡처 트래픽) + Postman(v2.1, 폴더 재귀·path 변수 템플릿화) 매퍼. GraphQL은 HTTP runner로 실제 공격까지(BOLA E2E). browser/WS/gRPC/queue runtime discovery는 아직 없음 |
 | `AC-205` | Satisfied | `src/coverage.ts:67-103`, `test/discovery-coverage.test.ts:55-81` | missing pack=`unsupported`, missing witness=`blocked`, 둘 다 coverage incomplete |
 | `AC-206` | Partially satisfied | OpenAPI는 source 없이 surface를 생성 | traffic/runtime edge와 white-box edge 구분은 미구현 |
 | `AC-400` | Satisfied | `src/validation.ts`의 `validateAttackProgram`, `test/registry-program.test.ts:47-66` | 모든 semantic field를 실행 전 검증 |

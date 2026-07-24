@@ -260,12 +260,20 @@ export function surfacesFromGraphql(input: unknown): SurfaceInput[] {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const LONG_HEX_RE = /^[0-9a-f]{24,}$/iu;
 
-/** Collapse concrete identifiers in a captured path so /users/123 and /users/456
- * map to one templated surface (/users/{id}) instead of exploding per request. */
+/** Collapse concrete identifiers in a path so /users/123 and /users/456 map to
+ * one templated surface (/users/{id}) instead of exploding. Also normalizes
+ * authored path variables (:id, {{var}}) so a Postman route and its captured
+ * instances converge on the same entry point. */
 function templatizePath(pathname: string): string {
   const segments = pathname.split('/').map((segment) => {
     if (segment === '') return segment;
-    if (/^\d+$/u.test(segment) || UUID_RE.test(segment) || LONG_HEX_RE.test(segment)) {
+    if (
+      /^\d+$/u.test(segment)
+      || UUID_RE.test(segment)
+      || LONG_HEX_RE.test(segment)
+      || segment.startsWith(':')
+      || /^\{\{.+\}\}$/u.test(segment)
+    ) {
       return '{id}';
     }
     return segment;
@@ -322,12 +330,79 @@ export function surfacesFromHar(input: unknown): SurfaceInput[] {
   return surfaces;
 }
 
+/** Extract the path from a Postman URL, which may be a raw string or an object
+ * with a `path` segment array. Returns undefined for a non-HTTP / unparseable URL. */
+function postmanUrlPath(url: unknown): string | undefined {
+  if (typeof url === 'string') {
+    if (url.trim() === '') return undefined;
+    try {
+      return new URL(url).pathname;
+    } catch {
+      return url.startsWith('/') ? url.split('?')[0] : undefined;
+    }
+  }
+  if (isRecord(url) && Array.isArray(url.path)) {
+    const segments = url.path.filter((segment): segment is string => typeof segment === 'string');
+    return `/${segments.join('/')}`;
+  }
+  return undefined;
+}
+
+/**
+ * Map a Postman Collection (v2.1) to passive HTTP surfaces: one per request
+ * (method + templated path), walking nested item folders. A request with a
+ * non-`noauth` auth block or an Authorization header is authenticated. Path
+ * variables (:id, {{var}}) are templatized so authored routes and their captured
+ * instances converge; duplicates merge in the inventory.
+ */
+export function surfacesFromPostman(input: unknown): SurfaceInput[] {
+  const document = asRecord(input, 'postman');
+  if (!Array.isArray(document.item)) {
+    throw new SpearConfigError('postman.item must be an array');
+  }
+  const surfaces: SurfaceInput[] = [];
+  const walk = (items: unknown[], path: string): void => {
+    items.forEach((raw, index) => {
+      const item = asRecord(raw, `${path}[${index}]`);
+      if (Array.isArray(item.item)) {
+        walk(item.item, `${path}[${index}].item`);
+        return;
+      }
+      if (item.request === undefined) return; // a folder or non-request entry
+      const request = asRecord(item.request, `${path}[${index}].request`);
+      const method = request.method;
+      if (typeof method !== 'string' || !HTTP_METHODS.has(method.toLowerCase())) {
+        throw new SpearConfigError(`${path}[${index}].request.method is unsupported: ${String(method)}`);
+      }
+      const pathname = postmanUrlPath(request.url);
+      if (pathname === undefined) return; // skip non-HTTP / unparseable URLs
+      const authBlock = isRecord(request.auth) ? request.auth.type : undefined;
+      const headers = Array.isArray(request.header) ? request.header : [];
+      const hasAuthHeader = headers.some(
+        (header) => isRecord(header) && typeof header.key === 'string'
+          && header.key.toLowerCase() === 'authorization',
+      );
+      const authenticated = (typeof authBlock === 'string' && authBlock !== 'noauth') || hasAuthHeader;
+      surfaces.push({
+        protocol: 'http',
+        entryPoint: templatizePath(pathname),
+        operation: method.toUpperCase(),
+        principals: authenticated ? ['authenticated-or-unknown'] : ['anonymous'],
+        mappingSource: 'postman',
+      });
+    });
+  };
+  walk(document.item, 'postman.item');
+  return surfaces;
+}
+
 export interface DiscoverySources {
   openApi?: unknown;
   nextRoutes?: unknown;
   supabase?: unknown;
   graphql?: unknown;
   har?: unknown;
+  postman?: unknown;
 }
 
 function buildInventory(
@@ -379,6 +454,7 @@ export function discoverSurfacesFrom(
   if (sources.supabase !== undefined) candidates.push(...surfacesFromSupabase(sources.supabase));
   if (sources.graphql !== undefined) candidates.push(...surfacesFromGraphql(sources.graphql));
   if (sources.har !== undefined) candidates.push(...surfacesFromHar(sources.har));
+  if (sources.postman !== undefined) candidates.push(...surfacesFromPostman(sources.postman));
   return buildInventory(profile, candidates, now);
 }
 
