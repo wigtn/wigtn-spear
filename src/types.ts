@@ -418,6 +418,17 @@ export type CausalOracle =
     witness: 'http-gateway';
     requestId: string;
     jsonPath: string;
+  }
+  | {
+    // A response header carries a forbidden value (FR-504): a reflected attacker
+    // origin in Access-Control-Allow-Origin (CORS misconfig), an external host in
+    // Location (open redirect), an injected header value. Case-insensitive header
+    // lookup, substring match on the value.
+    kind: 'response-header-contains';
+    witness: 'http-gateway';
+    requestId: string;
+    header: string;
+    value: string;
   };
 
 export interface HttpSequenceSpec {

@@ -72,6 +72,17 @@ export function evaluateOracle(oracle: CausalOracle, ctx: OracleContext): boolea
       const parsed = parseJson(observation.body);
       return parsed !== undefined && getPath(parsed, oracle.jsonPath) !== undefined;
     }
+    case 'response-header-contains': {
+      // A response header carries a forbidden value (reflected CORS origin,
+      // open-redirect Location, header injection).
+      const observation = ctx.observations.find((item) => item.requestId === oracle.requestId);
+      if (observation === undefined) return false;
+      const target = oracle.header.toLowerCase();
+      const match = Object.entries(observation.headers).find(
+        ([name]) => name.toLowerCase() === target,
+      );
+      return match !== undefined && match[1].includes(oracle.value);
+    }
   }
 }
 
@@ -100,6 +111,7 @@ export function oracleStatePaths(oracle: CausalOracle): string[] {
     case 'response-contains':
     case 'differential-access':
     case 'response-field-present':
+    case 'response-header-contains':
       return [];
     case 'partial-effect':
       return [oracle.committedPath, oracle.rolledBackPath];
