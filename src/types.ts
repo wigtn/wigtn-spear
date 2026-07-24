@@ -173,6 +173,13 @@ export interface CoveragePolicy {
   requiredWitnesses: string[];
   minimumEvidenceGrade: EvidenceGrade;
   allowedSafetyClasses: SafetyClass[];
+  /**
+   * Attribute-based requirement: every surface carrying one of these data classes
+   * must be at least attackable (compatible pack + ready witnesses) and meet
+   * minimumEvidenceGrade. More robust than requiredSurfaceIds, whose ids churn per
+   * build. Optional for back-compat; absent means no data-class requirement.
+   */
+  requiredDataClasses?: string[];
 }
 
 export interface SurfaceCoverage {

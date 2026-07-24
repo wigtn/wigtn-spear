@@ -389,6 +389,9 @@ export function validateCoveragePolicy(value: unknown): CoveragePolicy {
   });
   stringArray(policy, 'requiredSurfaceIds', 'policy');
   stringArray(policy, 'requiredWitnesses', 'policy');
+  if (policy.requiredDataClasses !== undefined) {
+    stringArray(policy, 'requiredDataClasses', 'policy');
+  }
   requireEnum(policy, 'minimumEvidenceGrade', 'policy', EVIDENCE_GRADES);
   const classes = stringArray(policy, 'allowedSafetyClasses', 'policy');
   if (classes.length === 0) {
