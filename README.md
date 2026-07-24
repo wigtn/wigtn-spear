@@ -24,7 +24,8 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 **발견·coverage**
 
 - operator fixture, OpenAPI 3.x JSON, Next.js(route-handler/server-action/
-  middleware), Supabase(table RLS·storage) 정적 descriptor 매퍼
+  middleware), Supabase(table RLS·storage), GraphQL 정적 descriptor 매퍼,
+  HAR 캡처 트래픽 매퍼(path id 템플릿화·중복 병합)
 - surface stable-ID 재계산·중복·target 바인딩 검증(변조 감지)
 - compatible/missing pack, missing witness, blind spot, evidence grade ledger
 - surface/coverage/pack-version diff, coverage 실패 전용 exit code `3`
@@ -86,9 +87,9 @@ node dist/src/cli.js manifest sign --input ./examples/authorization.unsigned.jso
 node dist/src/cli.js registry sign --input ./examples/registry.unsigned.json \
   --private-key ./local-owner.pem --key-id local-owner-2026 --output ./registry.json
 
-# 3) 네트워크 없이 surface 발견 (OpenAPI/Next.js/Supabase 병합 가능)
+# 3) 네트워크 없이 surface 발견 (OpenAPI/Next.js/Supabase/GraphQL/HAR 병합 가능)
 node dist/src/cli.js discover --profile ./examples/target.profile.json \
-  --openapi ./examples/openapi.json --output ./inventory.json
+  --openapi ./examples/openapi.json [--har ./capture.har.json] --output ./inventory.json
 
 # 4) explicit policy로 coverage 평가
 node dist/src/cli.js coverage --inventory ./inventory.json \

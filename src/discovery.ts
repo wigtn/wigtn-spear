@@ -257,11 +257,77 @@ export function surfacesFromGraphql(input: unknown): SurfaceInput[] {
   return surfaces;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+const LONG_HEX_RE = /^[0-9a-f]{24,}$/iu;
+
+/** Collapse concrete identifiers in a captured path so /users/123 and /users/456
+ * map to one templated surface (/users/{id}) instead of exploding per request. */
+function templatizePath(pathname: string): string {
+  const segments = pathname.split('/').map((segment) => {
+    if (segment === '') return segment;
+    if (/^\d+$/u.test(segment) || UUID_RE.test(segment) || LONG_HEX_RE.test(segment)) {
+      return '{id}';
+    }
+    return segment;
+  });
+  const joined = segments.join('/');
+  return joined === '' ? '/' : joined;
+}
+
+/**
+ * Map an HTTP Archive (HAR) capture — browser devtools / proxy traffic — to
+ * passive HTTP surfaces: one per observed method + templated path. A request
+ * carrying an Authorization or Cookie header is treated as authenticated, others
+ * as anonymous. The HAR is assumed to be scoped to the target host; duplicate
+ * captures of the same surface merge in the inventory (principals unioned).
+ */
+export function surfacesFromHar(input: unknown): SurfaceInput[] {
+  const document = asRecord(input, 'har');
+  const log = asRecord(document.log, 'har.log');
+  if (!Array.isArray(log.entries)) {
+    throw new SpearConfigError('har.log.entries must be an array');
+  }
+  const surfaces: SurfaceInput[] = [];
+  log.entries.forEach((raw, index) => {
+    const entry = asRecord(raw, `har.log.entries[${index}]`);
+    const request = asRecord(entry.request, `har.log.entries[${index}].request`);
+    const method = request.method;
+    if (typeof method !== 'string' || !HTTP_METHODS.has(method.toLowerCase())) {
+      throw new SpearConfigError(`har.log.entries[${index}].request.method is unsupported: ${String(method)}`);
+    }
+    const rawUrl = request.url;
+    if (typeof rawUrl !== 'string' || rawUrl.trim() === '') {
+      throw new SpearConfigError(`har.log.entries[${index}].request.url must be a non-empty string`);
+    }
+    let pathname: string;
+    try {
+      pathname = new URL(rawUrl).pathname;
+    } catch {
+      throw new SpearConfigError(`har.log.entries[${index}].request.url is not an absolute URL: ${rawUrl}`);
+    }
+    const headers = Array.isArray(request.headers) ? request.headers : [];
+    const authenticated = headers.some((header) => {
+      if (!isRecord(header) || typeof header.name !== 'string') return false;
+      const name = header.name.toLowerCase();
+      return name === 'authorization' || name === 'cookie';
+    });
+    surfaces.push({
+      protocol: 'http',
+      entryPoint: templatizePath(pathname),
+      operation: method.toUpperCase(),
+      principals: authenticated ? ['authenticated-or-unknown'] : ['anonymous'],
+      mappingSource: 'har-capture',
+    });
+  });
+  return surfaces;
+}
+
 export interface DiscoverySources {
   openApi?: unknown;
   nextRoutes?: unknown;
   supabase?: unknown;
   graphql?: unknown;
+  har?: unknown;
 }
 
 function buildInventory(
@@ -312,6 +378,7 @@ export function discoverSurfacesFrom(
   if (sources.nextRoutes !== undefined) candidates.push(...surfacesFromNextRoutes(sources.nextRoutes));
   if (sources.supabase !== undefined) candidates.push(...surfacesFromSupabase(sources.supabase));
   if (sources.graphql !== undefined) candidates.push(...surfacesFromGraphql(sources.graphql));
+  if (sources.har !== undefined) candidates.push(...surfacesFromHar(sources.har));
   return buildInventory(profile, candidates, now);
 }
 
