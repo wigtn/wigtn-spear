@@ -142,6 +142,49 @@ export function corpusCaseToProgram(item: CorpusCase, engagement: CorpusEngageme
   };
 }
 
+function firstString(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = asString(record[key]);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+/**
+ * Parse an exported AgentDojo (MIT) injection-task set. AgentDojo is Python task
+ * suites, not a flat file, so this expects a JSON export: an array (or `{injection_tasks}`
+ * / `{tasks}`) of objects carrying the attacker goal and optionally the user task and
+ * suite. AgentDojo places the injection in tool output the agent reads → tool-response
+ * (indirect). AgentDojo's own `security()` check is dropped; SPEAR re-judges by witness.
+ */
+export function parseAgentDojo(value: unknown, options: { suite?: string } = {}): CorpusCase[] {
+  const list = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.injection_tasks)
+      ? value.injection_tasks
+      : isRecord(value) && Array.isArray(value.tasks)
+        ? value.tasks
+        : undefined;
+  if (!list) {
+    throw new SpearConfigError('AgentDojo export must be an array or { injection_tasks | tasks: [...] }');
+  }
+  const cases: CorpusCase[] = [];
+  list.forEach((raw, index) => {
+    if (!isRecord(raw)) return;
+    const injection = firstString(raw, ['GOAL', 'goal', 'injection', 'injection_goal', 'attacker_goal']);
+    if (injection === undefined) return; // skip malformed
+    const userTask = firstString(raw, ['user_task', 'user_goal', 'USER_GOAL']) ?? 'Complete the assigned task.';
+    const suite = options.suite ?? firstString(raw, ['suite', 'suite_name', 'environment']) ?? 'injection';
+    const id = firstString(raw, ['id', 'ID', 'task_id'])
+      ?? sha256Digest({ injection, index }).slice(7, 23);
+    cases.push({ id, source: 'agentdojo', category: `agentdojo:${suite}`, vector: 'tool-response', userTask, injection });
+  });
+  if (cases.length === 0) {
+    throw new SpearConfigError('No valid AgentDojo injection tasks found (need a goal/injection string)');
+  }
+  return cases;
+}
+
 /**
  * Parse garak (Apache-2.0) probe payloads into direct-message cases. garak ships
  * payloads as newline-delimited data files or a JSON array of strings; both are

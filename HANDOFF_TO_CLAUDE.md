@@ -12,11 +12,14 @@
   - `parseGarakPrompts(input, {probe})`: garak(Apache-2.0) payload를 newline-delimited 또는
     JSON array로 받아 direct-message CorpusCase로. garak detector는 버리고 우리 witness로 재판정.
     `test/agent-garak.test.ts`(파싱 2형식 + vulnerable proven/fixed rejected).
+  - `parseAgentDojo(json, {suite})`: AgentDojo(MIT, Python task suite → JSON export) injection
+    task를 파싱(array 또는 `{injection_tasks|tasks}`, 키 유연: GOAL/goal/injection…). tool-response
+    (indirect)로 매핑, security() checker는 버림. `test/agent-agentdojo.test.ts`.
   - **LLM 키 배치**: `.env`(이미 gitignore) + `.env.example` 추가. 키는 `process.env`로만 읽고
     (`openAiChatTarget({apiKey: process.env.OPENAI_API_KEY!})`), evidence에서 redact. **채팅에
     붙였던 키는 폐기·재발급 필수.**
-  - 남음(우선순위): AgentDojo 어댑터, attacker-LLM 루프(PAIR/TAP), 실제 LLM 라이브 실증
-    (키는 이제 .env), corpus/MCP/memory CLI.
+  - 남음(우선순위): attacker-LLM 루프(PAIR/TAP), 실제 LLM 라이브 실증(키는 이제 .env),
+    corpus/MCP/memory CLI, 실제 corpus 파일로 대량 스코어카드 실행.
 
 - **2026-07-25 Phase 4 이어서: 공개 corpus ingestion — InjecAgent 어댑터 (`npm run check`: 132 passed).**
   - 한계 #1(손으로 짠 seed) 정면 대응 첫 벽돌. `src/agent/corpus.ts`:

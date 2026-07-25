@@ -55,8 +55,9 @@ witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등
 
 ## 남은 상향 작업 (우선순위)
 
-1. **corpus ingestion 확장** — InjecAgent(indirect)·garak(direct) 어댑터 구현됨
-   (`parseInjecAgent`/`parseGarakPrompts`). 다음: AgentDojo(MIT) 어댑터, 실제 corpus 파일로 대량 실행.
+1. **[해소] corpus ingestion** — InjecAgent(indirect)·garak(direct)·AgentDojo(indirect) 어댑터
+   구현됨(`parseInjecAgent`/`parseGarakPrompts`/`parseAgentDojo`). 다음: 실제 corpus 파일로 대량
+   스코어카드 실행(대외 숫자).
 2. **attacker-LLM 루프** — PAIR/TAP tree-search + Crescendo 멀티턴 재구현(black-box). 판정은
    여전히 deterministic(FR-408). mutation 엔진 + corpus를 이 루프의 seed로.
 3. **실제 LLM 에이전트 라이브 실증 1건** — flaky 비율 실측(#4). provider 어댑터는 준비됨,
