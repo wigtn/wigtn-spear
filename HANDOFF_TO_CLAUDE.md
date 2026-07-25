@@ -5,6 +5,20 @@
 
 ## 진행 로그
 
+- **2026-07-25 Phase 4 이어서: 벤치마크 하네스 + 냉정한 역량 자기평가 (`npm run check`: 126 passed).**
+  - `src/agent/benchmark.ts` `runBenchmark(cases)`: 프로브 corpus를 campaign으로 돌려
+    스코어카드 생성. disposition/category별 집계 + **independent-witness proven vs
+    reply-only proven 분리**(정직성) + 항상 disclaimer 3종 동봉(proven rate를 벌거벗겨
+    읽지 못하게). `renderScorecardMarkdown`. `test/agent-benchmark.test.ts`: 5계열
+    full-family campaign(전부 proven, witnessed 3/reply 2) + hardened(proven 0).
+  - `docs/product/agent-attack-capability-assessment.md`: **냉정한 자기평가**. 정직한 상한 =
+    "고객 협조 gray-box 교전에서 알려진 6클래스를 반박불가 증거로 입증·회귀". 한계: 발견이
+    아닌 검증(프로브 카탈로그 3개 seed), witness 의존, fixture-proven≠real-world(라이브 LLM
+    실증 0건), adaptive search 없음, black-box tool용 gateway witness 없음. 상향책: 라이브
+    실증 1건, InjecAgent/AgentDojo 케이스 수입, gateway/OTel witness, FR-407.
+  - 남음(우선순위): 공개 벤치마크 케이스 수입(InjecAgent/AgentDojo), 실제 LLM 라이브 실증,
+    MCP/memory CLI+서명번들, gateway/OTel witness, adaptive 프로브 생성(FR-407).
+
 - **2026-07-25 Phase 4 이어서: MCP pack(FR-456) + memory pack(FR-457/458) (`npm run check`: 124 passed).**
   - `src/agent/mcp.ts` `verifyMcpIntegrity`: MCP tool listing을 approval/execution 두 시점
     snapshot → `digestMcpCapabilities`로 capability digest 비교. rug pull(digest drift)·
