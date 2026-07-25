@@ -27,9 +27,12 @@ witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등
    판정은 여전히 deterministic oracle(FR-408).
 2. **[해소] adaptive search(FR-407).** 위 `searchAgentAttack`가 실패 시 다음 전략으로
    진행하고 proven이면 조기 종료, budget으로 bound. 고정 프로그램만 돌던 상태 해소.
-3. **[남음] witness 의존 / black-box.** `proven`은 여전히 계측 가능한 witness가 필요.
-   완전 black-box는 candidate로 강등. 다음: tool egress를 임의 목적지까지 독립 관측하는
-   gateway/proxy witness(고객 협조 없이).
+3. **[부분 해소] witness 의존 / black-box.** `agent-gateway-egress` oracle +
+   `GatewayWitness`로, 에이전트 tool egress를 **프록시 chokepoint**로 통과시켜 임의
+   목적지(공격자 서버 포함)로 나가는 exfil을 관측한다. owned sink을 pre-register할
+   필요 없이 **egress 경로만 통제하면** 됨(현실적 black-box 세팅: 에이전트 프록시를
+   우리로). **여전한 경계**: 에이전트가 프록시를 우회하거나 egress를 계측 못 하면 여전히
+   candidate. 완전 무협조 black-box는 미해결.
 4. **[남음] fixture-proven ≠ real-world.** 실제 확률적 LLM 에이전트 end-to-end 실증
    **여전히 0건**. flaky 비율 미실측. provider 어댑터는 준비됐으나 라이브 실행은 미수행.
 
@@ -38,7 +41,7 @@ witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등
 | 교전 유형 | 현실적 역량 |
 |---|---|
 | **Authorized gray-box (고객이 staging에 canary 심고 witness 노출)** | 6종 전부 실제 finding 입증 가능. **여기가 SPEAR의 sweet spot이자 팔 수 있는 역량.** |
-| **Authorized black-box (라이브 엔드포인트, 계측 없음)** | canary를 심을 수 있으면 reply-leak까지. tool-egress/backend-state/memory는 owned witness 없이는 proven 불가 → candidate 수준. |
+| **Authorized black-box (egress 프록시만 우리로)** | gateway witness로 임의 목적지 exfil까지 proven. canary 심으면 reply-leak도. 프록시조차 못 태우는 완전 무협조면 candidate. |
 | **자율 발견 / 새 공격 생성** | **역량 아님.** SPEAR는 verifier지 discoverer가 아니다. |
 
 ## 이 벤치마크 하네스가 하는 것 / 못 하는 것
@@ -52,10 +55,13 @@ witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등
 
 ## 남은 상향 작업 (우선순위)
 
-1. **gateway/proxy witness** — 에이전트 tool egress를 임의 목적지까지 독립 관측(고객이
-   canary sink을 안 세워도). black-box witness 의존(#3) 해소의 핵심.
-2. **실제 LLM 에이전트 라이브 실증 1건** — flaky 비율 실측(#4). provider 어댑터는 준비됨,
-   API 키(env) 필요.
+1. **공개 corpus ingestion (최우선)** — garak(Apache-2.0)/InjecAgent(MIT, 1,054, 성공조건이
+   tool 호출)/AgentDojo(MIT)를 프로브로 자동 변환. 각 corpus의 oracle은 hint로 강등하고
+   우리 witness로 ground truth 재도출. "손으로 짠 seed"를 필드 전체 축적으로 대체.
+2. **attacker-LLM 루프** — PAIR/TAP tree-search + Crescendo 멀티턴 재구현(black-box). 판정은
+   여전히 deterministic(FR-408).
+3. **실제 LLM 에이전트 라이브 실증 1건** — flaky 비율 실측(#4). provider 어댑터는 준비됨,
+   API 키(env) 필요. gateway witness는 구현됨(black-box egress 관측).
 3. **공개 벤치마크 케이스 수입** — InjecAgent(1,054)/AgentDojo(629)를 프로브 corpus로
    변환해 벤치마크 하네스로 "SPEAR proven vs 저들 judge" 대외 비교.
 4. **LLM 기반 변형 전략 추가** — `MUTATION_STRATEGIES`에 LLM 생성 변형을 한 소스로 추가.

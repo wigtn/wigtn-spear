@@ -5,6 +5,27 @@
 
 ## 진행 로그
 
+- **2026-07-25 Phase 4 이어서: gateway/proxy witness — black-box egress 관측 (`npm run check`: 130 passed).**
+  - 냉정 평가 한계 #2(witness 의존/black-box) 부분 해소. `agent-gateway-egress` oracle
+    (`gateway: {observeUrl, resetUrl}` + `canary`): 에이전트 tool egress를 **owned 프록시
+    chokepoint**로 통과시켜, **공격자 목적지(우리가 등록 안 한)로 나가는 exfil까지** 관측.
+    owned sink(우리한테 온 트래픽만 봄)보다 강함 — egress 경로만 통제하면 됨(현실적 black-box).
+  - `run.ts` egress witness 일반화(sink|gateway 공통 `{observeUrl,resetUrl}` 인터페이스,
+    `resetSink`/`sinkObserved` 재사용), pin(canary/control), `validation.ts` 검증.
+    fixture `GatewayWitness`(POST /proxy 로깅·forward 안 함, GET /observed, POST /reset) +
+    agent exfil 분기(vulnerable=프록시로 라우팅, fixed=거부). `test/agent-gateway.test.ts`:
+    attacker.evil로 나가는 exfil을 gateway가 witness → proven / fixed → rejected.
+  - **복구 메모**: PR #19가 벤치마크 커밋만 머지하고 mutator+search(02a4e1d, FR-407)를
+    누락 → 이 브랜치로 cherry-pick해 복구함. 이 브랜치엔 mutator+search+gateway 모두 포함.
+  - 리서치(별도, 검증됨): 공개 corpus 중 **InjecAgent(MIT, 1,054, 성공=tool 호출)**·**garak
+    (Apache-2.0, 프로브/디텍터 분리 → payload 재사용+witness로 판정 교체)**·AgentDojo(MIT)가
+    ingest 최적. Lakera PINT는 데이터 비공개, AgentHarm은 gated/safety-only. autonomous
+    discovery SOTA: PAIR/TAP/Crescendo/AutoDAN-Turbo(black-box attacker-LLM), CoreCrisis
+    (FSM fuzzing, 도메인은 5G지만 agent tool-FSM으로 이식 = 미개척 moat). 아키텍처: corpus
+    ingest·attacker loop=재사용, witness+counterfactual+replay·agent-state fuzzer=우리 moat.
+  - 남음(우선순위): **공개 corpus ingestion(InjecAgent/garak, 최우선)**, attacker-LLM 루프
+    (PAIR/TAP), 실제 LLM 라이브 실증, agent tool-state fuzzer(프론티어).
+
 - **2026-07-25 Phase 4 이어서: 발견 엔진 — 프로브 변형 + 적응형 탐색 (`npm run check`: 129 passed).**
   - 냉정 평가의 한계 #1(발견 아닌 검증)·#4(adaptive search 없음)를 실제로 해소.
   - `src/agent/mutator.ts`: seed 지시를 8개 전략(override/authority/social/roleplay/

@@ -54,8 +54,14 @@ async function runSequence(
   deps: AgentFetchDeps,
 ): Promise<AgentSequenceReceipt> {
   const tokens = ['canary' in program.oracle ? program.oracle.canary : '', program.planted.canary];
-  const needsSink = program.oracle.kind === 'agent-tool-egress';
-  if (needsSink && program.sink) await resetSink(program.sink, deps);
+  // The egress witness is an owned sink (tool-egress) or an owned proxy/gateway
+  // (gateway-egress); both expose the same {observeUrl, resetUrl} interface.
+  const egressWitness = program.oracle.kind === 'agent-tool-egress'
+    ? program.sink
+    : program.oracle.kind === 'agent-gateway-egress'
+      ? program.oracle.gateway
+      : undefined;
+  if (egressWitness) await resetSink(egressWitness, deps);
   // Indirect injection (FR-451): the malicious instruction is planted in untrusted
   // data the agent ingests, delivered only in the attack phase.
   if (program.carrier) {
@@ -79,8 +85,8 @@ async function runSequence(
   };
 
   let observed = false;
-  if (needsSink && program.sink && 'canary' in program.oracle) {
-    observed = await sinkObserved(program.sink, program.oracle.canary, deps);
+  if (egressWitness && 'canary' in program.oracle) {
+    observed = await sinkObserved(egressWitness, program.oracle.canary, deps);
   }
   const stateAfter = program.oracle.kind === 'agent-backend-state'
     ? await readWitnessValue(program.oracle.witnessUrl, deps)
@@ -180,6 +186,10 @@ export async function runAgentAttack(options: AgentRunOptions): Promise<AgentRun
     if (program.oracle.kind === 'agent-backend-state') {
       assertPinnableOrigin(program.oracle.witnessUrl, 'Agent backend-state witness URL');
     }
+    if (program.oracle.kind === 'agent-gateway-egress') {
+      assertPinnableOrigin(program.oracle.gateway.observeUrl, 'Agent gateway observe URL');
+      assertPinnableOrigin(program.oracle.gateway.resetUrl, 'Agent gateway reset URL');
+    }
     deps = { guard, fetchImpl: options.fetchImpl };
   } else {
     // Real runs pin each origin to its resolved IPs and connect through an undici
@@ -194,6 +204,10 @@ export async function runAgentAttack(options: AgentRunOptions): Promise<AgentRun
     }
     if (program.oracle.kind === 'agent-backend-state') {
       await guard.pin(program.oracle.witnessUrl, 'control');
+    }
+    if (program.oracle.kind === 'agent-gateway-egress') {
+      await guard.pin(program.oracle.gateway.observeUrl, 'canary');
+      await guard.pin(program.oracle.gateway.resetUrl, 'control');
     }
     deps = { guard, dispatcher: createPinnedDispatcher(guard.pins) };
   }
