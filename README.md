@@ -51,10 +51,11 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 
 - black-box agent 어댑터(엔드포인트 + body 템플릿 + reply JSON path), 소켓 전
   authorization scope 검증. baseline/attack/counterfactual + 3-of-2 반복 임계
-- proven급 oracle 3종: `agent-canary-leak`(심어둔 canary가 응답에 정확히 등장 →
+- proven급 oracle 4종: `agent-canary-leak`(심어둔 canary가 응답에 정확히 등장 →
   데이터/시스템프롬프트 유출), `agent-tool-egress`(owned sink이 canary를 관측 →
-  tool 호출이 프로세스 밖으로 실제 유출했음을 응답과 무관하게 입증), `agent-backend-state`
-  (owned witness가 권한 있는 백엔드 상태변화를 관측 → confused deputy/excessive agency).
+  tool 호출이 프로세스 밖으로 실제 유출), `agent-backend-state`(owned witness가 권한
+  백엔드 상태변화를 관측 → confused deputy/excessive agency), `agent-gateway-egress`
+  (owned 프록시 chokepoint가 임의 목적지로 나가는 exfil을 관측 → black-box egress).
   candidate 전용 `agent-marker-compliance`(self-report)는 causal proof 경로에서 명시적 거부
 - canary redaction + Ed25519 서명 agent evidence bundle. 취약/수정 agent + owned
   sink fixture로 proven/rejected 실증. 설계는 `docs/product/agent-attack-design.md`
@@ -70,6 +71,9 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - 벤치마크 스코어카드 하네스: 프로브 corpus를 campaign으로 돌려 proven/candidate/rejected
   집계 + independent-witness proven vs reply-only proven 분리(정직성). 냉정한 역량 상한은
   [capability assessment](./docs/product/agent-attack-capability-assessment.md) 참고
+- gateway/proxy witness(`agent-gateway-egress`): 에이전트 egress를 프록시로 통과시켜
+  임의 목적지 exfil을 관측(owned sink 불필요, black-box). mutation 엔진 + 적응형 exploit
+  탐색(`searchAgentAttack`, FR-407): seed가 실패해도 통하는 변형을 스스로 탐색(판정은 witness)
 
 **증거·수명주기**
 
@@ -81,11 +85,11 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 ## 아직 구현되지 않은 것
 
 - browser/WebSocket/gRPC/queue runtime 자동 mapping
-- agent: 공개 벤치마크 케이스 수입(AgentDojo/InjecAgent), 실제 LLM 라이브 실증, MCP/memory
-  CLI(`run mcp`/`run memory`)+서명 번들, gateway/OTel witness, adaptive 프로브 생성(FR-407)
-  (agent 공격 엔진 6종·`run agent` CLI·provider 프리셋·hostname pinning·project-only(FR-455)·
-  indirect carrier(FR-451)·confused deputy(LLM06)·MCP rug-pull/shadowing(FR-456)·memory
-  poisoning/sleeper(FR-457/458)·벤치마크 스코어카드 하네스는 구현됨)
+- agent: 공개 corpus ingestion(garak/InjecAgent/AgentDojo, 최우선), attacker-LLM 루프
+  (PAIR/TAP/Crescendo), 실제 LLM 라이브 실증, MCP/memory CLI+서명 번들, agent tool-state
+  fuzzer(프론티어) (agent 공격 엔진 7종·`run agent` CLI·provider 프리셋·hostname pinning·
+  project-only(FR-455)·indirect carrier(FR-451)·confused deputy(LLM06)·MCP(FR-456)·memory
+  (FR-457/458)·gateway egress witness·mutation+adaptive search(FR-407)·벤치마크 하네스는 구현됨)
 - race/parser/cloud 등 추가 project attack family
 - live target을 재공격하는 CI deterministic replay
 - HTTP 동시성(paired/maxConcurrency 강제), browser/DB audit witness oracle

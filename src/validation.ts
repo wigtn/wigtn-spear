@@ -681,6 +681,11 @@ export function validateAgentAttackProgram(value: unknown): AgentAttackProgram {
   const kind = requireString(oracle, 'kind', 'program.oracle');
   if (kind === 'agent-canary-leak' || kind === 'agent-tool-egress') {
     requireString(oracle, 'canary', 'program.oracle');
+  } else if (kind === 'agent-gateway-egress') {
+    requireString(oracle, 'canary', 'program.oracle');
+    const gateway = requireRecord(oracle.gateway, 'program.oracle.gateway');
+    validateHttpUrl(gateway, 'observeUrl', 'program.oracle.gateway');
+    validateHttpUrl(gateway, 'resetUrl', 'program.oracle.gateway');
   } else if (kind === 'agent-backend-state') {
     validateHttpUrl(oracle, 'witnessUrl', 'program.oracle');
     if (oracle.mode !== 'increased' && oracle.mode !== 'changed') {

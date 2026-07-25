@@ -17,30 +17,31 @@ witness 기반 proven vertical 6종이 vulnerable/fixed fixture로 실증됨:
 공통 강점: baseline/attack/counterfactual + replay 임계 + **독립 out-of-process
 witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등하고 proven을 거부.
 
-## 냉정한 한계 (이걸 감추면 사기다)
+## 한계 진행 상황 (닫힌 것 / 남은 것)
 
-1. **발견이 아니라 검증이다.** SPEAR는 사람이/LLM이 작성한 attack program을 실행해
-   *입증*한다. 미지의 취약점을 스스로 *발견*하거나 새로운 jailbreak를 생성하지 않는다.
-   내장 프로브 카탈로그는 3개짜리 seed에 불과하다. **얼마나 터느냐 = 프로브가 얼마나
-   좋으냐**이고, 그건 아직 사람 손에 달렸다.
-2. **witness에 의존한다.** `proven`은 계측 가능한 witness(owned sink, backend witness,
-   MCP 엔드포인트, 심어둔 reply canary)가 있어야 한다. 계측이 전혀 없는 완전 black-box
-   타깃에서는 대부분 candidate로 떨어진다.
-3. **fixture-proven ≠ real-world-proven.** 지금 모든 테스트는 *우리가 취약하게 만든*
-   fixture를 증명한다. 엔진은 검증됐지만, **실제 확률적 LLM 에이전트를 상대로 한
-   end-to-end 실증은 아직 0건**이다. flaky 비율도 실측된 적 없다(3-of-2 임계는 이론).
-4. **adaptive search 없음(FR-407 미구현).** 공격이 실패해도 재시도·진화하지 않는다.
-   고정된 프로그램만 돈다.
-5. **black-box tool 관측용 gateway/OTel witness 없음.** v2 cold assessment가 최우선
-   Blocker로 지목한 "대상이 준 trace를 안 믿고 독립 수집" — agent tool 계층에선 아직
-   owned sink을 우리가 세팅해야만 가능하다(고객 협조 전제).
+1. **[부분 해소] 발견 vs 검증.** `src/agent/mutator.ts`(변형 엔진)+`search.ts`(적응형
+   탐색, FR-407)로 이제 seed 하나를 다수 변형으로 펼쳐 **타깃에 먹히는 exploit 변형을
+   스스로 탐색**한다(`searchAgentAttack`). seed가 그대로는 실패해도 override/social/
+   roleplay/obfuscation 변형 중 통하는 걸 찾는다. **여전한 정직한 경계**: 이건 *알려진
+   클래스 안에서* 통하는 phrasing 발견이지, *새 취약점 클래스*를 발명하는 건 아니다.
+   판정은 여전히 deterministic oracle(FR-408).
+2. **[해소] adaptive search(FR-407).** 위 `searchAgentAttack`가 실패 시 다음 전략으로
+   진행하고 proven이면 조기 종료, budget으로 bound. 고정 프로그램만 돌던 상태 해소.
+3. **[부분 해소] witness 의존 / black-box.** `agent-gateway-egress` oracle +
+   `GatewayWitness`로, 에이전트 tool egress를 **프록시 chokepoint**로 통과시켜 임의
+   목적지(공격자 서버 포함)로 나가는 exfil을 관측한다. owned sink을 pre-register할
+   필요 없이 **egress 경로만 통제하면** 됨(현실적 black-box 세팅: 에이전트 프록시를
+   우리로). **여전한 경계**: 에이전트가 프록시를 우회하거나 egress를 계측 못 하면 여전히
+   candidate. 완전 무협조 black-box는 미해결.
+4. **[남음] fixture-proven ≠ real-world.** 실제 확률적 LLM 에이전트 end-to-end 실증
+   **여전히 0건**. flaky 비율 미실측. provider 어댑터는 준비됐으나 라이브 실행은 미수행.
 
 ## "어느 수준까지 터나" — 정직한 3단계
 
 | 교전 유형 | 현실적 역량 |
 |---|---|
 | **Authorized gray-box (고객이 staging에 canary 심고 witness 노출)** | 6종 전부 실제 finding 입증 가능. **여기가 SPEAR의 sweet spot이자 팔 수 있는 역량.** |
-| **Authorized black-box (라이브 엔드포인트, 계측 없음)** | canary를 심을 수 있으면 reply-leak까지. tool-egress/backend-state/memory는 owned witness 없이는 proven 불가 → candidate 수준. |
+| **Authorized black-box (egress 프록시만 우리로)** | gateway witness로 임의 목적지 exfil까지 proven. canary 심으면 reply-leak도. 프록시조차 못 태우는 완전 무협조면 candidate. |
 | **자율 발견 / 새 공격 생성** | **역량 아님.** SPEAR는 verifier지 discoverer가 아니다. |
 
 ## 이 벤치마크 하네스가 하는 것 / 못 하는 것
@@ -52,17 +53,23 @@ witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등
   항상 disclaimer 3종을 달고 나오는 이유다. 공개 벤치마크(AgentDojo/InjecAgent) 케이스를
   이 corpus로 *수입*해야 대외 비교가 성립한다(다음 작업).
 
-## 상향하려면 필요한 것 (우선순위)
+## 남은 상향 작업 (우선순위)
 
-1. **실제 LLM 에이전트 라이브 실증 1건** — flaky 비율 실측. 지금 가장 큰 공백.
-2. **공개 벤치마크 케이스 수입** — InjecAgent(1,054케이스)/AgentDojo(629 injection)를
-   프로브 corpus로 변환해 이 하네스로 돌리고 "SPEAR proven vs 저들 judge" 비교.
-3. **gateway/OTel witness 수집** — black-box에서 tool 호출을 독립 관측(협조 없이도).
-4. **adaptive/LLM 프로브 생성(FR-407)** — 단, 판정은 여전히 deterministic(FR-408).
+1. **공개 corpus ingestion (최우선)** — garak(Apache-2.0)/InjecAgent(MIT, 1,054, 성공조건이
+   tool 호출)/AgentDojo(MIT)를 프로브로 자동 변환. 각 corpus의 oracle은 hint로 강등하고
+   우리 witness로 ground truth 재도출. "손으로 짠 seed"를 필드 전체 축적으로 대체.
+2. **attacker-LLM 루프** — PAIR/TAP tree-search + Crescendo 멀티턴 재구현(black-box). 판정은
+   여전히 deterministic(FR-408).
+3. **실제 LLM 에이전트 라이브 실증 1건** — flaky 비율 실측(#4). provider 어댑터는 준비됨,
+   API 키(env) 필요. gateway witness는 구현됨(black-box egress 관측).
+3. **공개 벤치마크 케이스 수입** — InjecAgent(1,054)/AgentDojo(629)를 프로브 corpus로
+   변환해 벤치마크 하네스로 "SPEAR proven vs 저들 judge" 대외 비교.
+4. **LLM 기반 변형 전략 추가** — `MUTATION_STRATEGIES`에 LLM 생성 변형을 한 소스로 추가.
+   단 판정은 여전히 deterministic(FR-408).
 
 ## 한 줄 결론
 
-엔진과 증거 체계는 진짜다(6종 witness-proven, 126 테스트). 하지만 지금은 **"고객이
-협조하는 gray-box 교전에서, 알려진 6개 클래스를 반박 불가능한 증거로 입증·회귀"**가
-정직한 상한이다. "실제 에이전트를 자율로 턴다"는 아직 못 하고, 그 격차를 메우는 건
-프로브 corpus 확장 + 라이브 실증 + gateway witness이지 엔진을 더 짓는 게 아니다.
+엔진·증거·**적응형 탐색**까지 진짜다(6종 witness-proven + mutation search, 129 테스트).
+정직한 상한은 여전히 **"고객 협조 gray-box 교전에서 알려진 6클래스를 반박불가 증거로
+입증·회귀 + 통하는 exploit 변형 자동 탐색"**. 남은 격차는 (a) black-box에서의 독립
+witness(gateway), (b) 실제 LLM 라이브 실증 — 둘 다 진행 중 항목이다.
