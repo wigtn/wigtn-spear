@@ -29,6 +29,23 @@ export interface AgentSink {
   resetUrl: string;
 }
 
+/**
+ * An owned, untrusted-data carrier for indirect (compound) prompt injection
+ * (FR-451): the malicious instruction lives in DATA the agent ingests — a
+ * document, tool result, issue body — not in the user's direct message. SPEAR
+ * sets the carrier's content per phase (benign for baseline/counterfactual,
+ * malicious for the attack), so the injection is proven to flow through untrusted
+ * data, not operator input.
+ */
+export interface AgentCarrier {
+  /** POST here with `{ "content": "..." }` to set what the agent will ingest. */
+  setUrl: string;
+  /** Served during baseline and counterfactual — no injection. */
+  benignContent: string;
+  /** Served during the attack — carries the injection (may embed the sink URL / canary). */
+  maliciousContent: string;
+}
+
 export type AgentOracle =
   | {
     // Proven-grade, deterministic: the exact planted canary appears verbatim in
@@ -116,6 +133,13 @@ export interface AgentAttackProgram {
   sink?: AgentSink;
   /** Optional FR-455 control: attempt the same effect directly, without the agent. */
   projectOnly?: AgentProjectOnlyProbe;
+  /**
+   * Optional FR-451 compound carrier: when present, the injection is delivered
+   * through untrusted data the agent ingests (indirect injection) rather than the
+   * message. SPEAR sets it benign before baseline/counterfactual and malicious
+   * before the attack; the per-phase messages should be an identical benign task.
+   */
+  carrier?: AgentCarrier;
 }
 
 export interface AgentTurn {
@@ -144,6 +168,8 @@ export interface AgentRunResult {
   runId: string;
   programId: string;
   oracleKind: AgentOracle['kind'];
+  /** `indirect-carrier` when the injection flowed through untrusted data (FR-451); else `direct`. */
+  injectionVector: 'direct' | 'indirect-carrier';
   /** Behavioral (marker) oracles cap at `candidate`; effect oracles can reach `proven`. */
   evidenceGrade: 'candidate' | 'proven-capable';
   disposition: CandidateDisposition;

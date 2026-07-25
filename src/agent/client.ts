@@ -2,7 +2,7 @@ import { fetch as undiciFetch, type Dispatcher } from 'undici';
 import { SpearConfigError, SpearExecutionError } from '../errors.js';
 import { DestinationGuard, type DestinationPurpose } from '../safety.js';
 import { isRecord } from '../utils.js';
-import type { AgentSink, AgentTarget } from './types.js';
+import type { AgentCarrier, AgentSink, AgentTarget } from './types.js';
 
 export type FetchImpl = typeof fetch;
 
@@ -118,6 +118,34 @@ export async function directAttackerRequest(
     deps,
   );
   return { status: response.status, body: await readBounded(response, maxBytes) };
+}
+
+/**
+ * Set the owned carrier's content for the upcoming phase (FR-451 indirect
+ * injection). The carrier is owned control infrastructure, so it uses the control
+ * scope; the agent later ingests this content as untrusted data.
+ */
+export async function setCarrier(
+  carrier: AgentCarrier,
+  content: string,
+  deps: AgentFetchDeps,
+): Promise<void> {
+  try {
+    await guardedFetch(
+      carrier.setUrl,
+      'control',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content }),
+      },
+      deps,
+    );
+  } catch (error) {
+    throw new SpearExecutionError(
+      `Carrier set failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 /** Reset the owned witness sink to a clean state between attempts. */

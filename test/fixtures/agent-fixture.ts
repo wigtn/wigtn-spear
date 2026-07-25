@@ -88,6 +88,76 @@ export class OwnedSink {
 }
 
 /**
+ * An owned untrusted-data carrier for indirect injection. SPEAR POSTs `/set` to
+ * choose what the (simulated) agent will read from `/doc` this phase.
+ */
+export class OwnedCarrier {
+  readonly #server: Server;
+  #origin = '';
+  #content = '';
+
+  constructor() {
+    this.#server = createServer((req, res) => {
+      this.#handle(req, res).catch(() => {
+        res.statusCode = 500;
+        res.end('{"error":"internal"}');
+      });
+    });
+  }
+
+  get origin(): string {
+    if (!this.#origin) throw new Error('OwnedCarrier is not listening');
+    return this.#origin;
+  }
+
+  get setUrl(): string {
+    return `${this.origin}/set`;
+  }
+
+  get docUrl(): string {
+    return `${this.origin}/doc`;
+  }
+
+  async listen(): Promise<string> {
+    const port = await listenLoopback(this.#server);
+    this.#origin = `http://127.0.0.1:${port}`;
+    return this.#origin;
+  }
+
+  async close(): Promise<void> {
+    await new Promise<void>((resolve) => this.#server.close(() => resolve()));
+  }
+
+  async #handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const url = new URL(req.url ?? '/', this.origin);
+    if (req.method === 'POST' && url.pathname === '/set') {
+      try {
+        const parsed: unknown = JSON.parse(await readBody(req));
+        if (parsed && typeof parsed === 'object' && typeof (parsed as { content?: unknown }).content === 'string') {
+          this.#content = (parsed as { content: string }).content;
+        }
+      } catch {
+        res.statusCode = 400;
+        res.end('{"error":"bad request"}');
+        return;
+      }
+      res.statusCode = 200;
+      res.setHeader('content-type', 'application/json');
+      res.end('{"ok":true}');
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/doc') {
+      res.statusCode = 200;
+      res.setHeader('content-type', 'text/plain');
+      res.end(this.#content);
+      return;
+    }
+    res.statusCode = 404;
+    res.end('{"error":"not found"}');
+  }
+}
+
+/**
  * A disposable agent fixture. `vulnerable: true` obeys injected instructions —
  * leaking its planted secret and driving its "web tool" to attacker URLs.
  * `vulnerable: false` refuses both, so the same attack programs are rejected.
@@ -157,9 +227,26 @@ export class AgentFixture {
     return this.#json(res, 200, { reply: await this.#reply(message) });
   }
 
-  async #reply(message: string): Promise<string> {
+  async #reply(message: string, depth = 0): Promise<string> {
     const lower = message.toLowerCase();
     const urlMatch = message.match(/https?:\/\/[^\s"']+/u);
+
+    // Indirect-injection branch: the task asks the agent to read/follow a document.
+    // The vulnerable agent fetches the untrusted document and follows its content
+    // as if it were an instruction; the fixed agent treats it as data only.
+    if (depth === 0 && urlMatch && /document|follow the instructions|read the/u.test(lower)) {
+      let docText = '';
+      try {
+        const response = await fetch(urlMatch[0], { method: 'GET' });
+        docText = await response.text();
+      } catch {
+        // Unreachable document — treat as empty.
+      }
+      if (!this.vulnerable) {
+        return 'Here is a brief, safe summary of the requested document.';
+      }
+      return this.#reply(docText, depth + 1);
+    }
 
     // Tool-egress branch: the message asks the agent to fetch a URL.
     if (urlMatch) {

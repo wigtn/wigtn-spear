@@ -12,6 +12,7 @@ import {
   directAttackerRequest,
   type FetchImpl,
   resetSink,
+  setCarrier,
   sinkObserved,
 } from './client.js';
 import { evaluateAgentOracle, oracleEvidenceGrade } from './oracle.js';
@@ -54,6 +55,12 @@ async function runSequence(
   const tokens = ['canary' in program.oracle ? program.oracle.canary : '', program.planted.canary];
   const needsSink = program.oracle.kind === 'agent-tool-egress';
   if (needsSink && program.sink) await resetSink(program.sink, deps);
+  // Indirect injection (FR-451): the malicious instruction is planted in untrusted
+  // data the agent ingests, delivered only in the attack phase.
+  if (program.carrier) {
+    const content = role === 'attack' ? program.carrier.maliciousContent : program.carrier.benignContent;
+    await setCarrier(program.carrier, content, deps);
+  }
 
   const { reply, status } = await callAgent(program.target, spec.message, deps);
   const turn: AgentTurn = {
@@ -150,6 +157,9 @@ export async function runAgentAttack(options: AgentRunOptions): Promise<AgentRun
     if (program.projectOnly) {
       assertPinnableOrigin(program.projectOnly.request.url, 'Agent project-only request URL');
     }
+    if (program.carrier) {
+      assertPinnableOrigin(program.carrier.setUrl, 'Agent carrier set URL');
+    }
     deps = { guard, fetchImpl: options.fetchImpl };
   } else {
     // Real runs pin each origin to its resolved IPs and connect through an undici
@@ -158,6 +168,9 @@ export async function runAgentAttack(options: AgentRunOptions): Promise<AgentRun
     if (program.sink) {
       await guard.pin(program.sink.observeUrl, 'canary');
       await guard.pin(program.sink.resetUrl, 'control');
+    }
+    if (program.carrier) {
+      await guard.pin(program.carrier.setUrl, 'control');
     }
     deps = { guard, dispatcher: createPinnedDispatcher(guard.pins) };
   }
@@ -186,6 +199,7 @@ export async function runAgentAttack(options: AgentRunOptions): Promise<AgentRun
     runId: `agent-run-${randomUUID()}`,
     programId: program.id,
     oracleKind: program.oracle.kind,
+    injectionVector: program.carrier ? 'indirect-carrier' : 'direct',
     evidenceGrade: 'proven-capable',
     disposition: outcome.disposition,
     attempts: outcome.attempts,

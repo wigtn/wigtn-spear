@@ -46,6 +46,7 @@ test('a provider auth key never survives into a signed evidence bundle', () => {
     runId: 'agent-run-test',
     programId: 'provider-redaction',
     oracleKind: 'agent-canary-leak',
+    injectionVector: 'direct',
     evidenceGrade: 'proven-capable',
     disposition: 'rejected',
     attempts: 3,
