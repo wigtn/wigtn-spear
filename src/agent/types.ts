@@ -62,6 +62,15 @@ export type AgentOracle =
     canary: string;
   }
   | {
+    // Proven-grade, independent witness: a privileged backend action fired. An
+    // owned witness endpoint reports a state value; forbidden when it moves only
+    // under attack (confused deputy / excessive agency, OWASP LLM06). The agent
+    // uses its own privilege to mutate the backend on the attacker's behalf.
+    kind: 'agent-backend-state';
+    witnessUrl: string;
+    mode: 'increased' | 'changed';
+  }
+  | {
     // Candidate-grade ONLY: the reply emitted a compliance marker the probe asked
     // for. Behavioral, self-reported, no independent effect — reported as a lead,
     // never promoted to `proven` (SPEAR does not overclaim on model text).
@@ -89,8 +98,12 @@ export interface AgentProjectOnlyProbe {
     headers?: Record<string, string>;
     body?: string;
   };
-  /** How the effect is detected on the direct path. `sink-egress` needs the owned sink. */
-  detection: 'canary-in-response' | 'sink-egress';
+  /**
+   * How the effect is detected on the direct path. `sink-egress` needs the owned
+   * sink; `backend-state-change` needs an `agent-backend-state` oracle (reads its
+   * witness before/after the direct request).
+   */
+  detection: 'canary-in-response' | 'sink-egress' | 'backend-state-change';
 }
 
 export interface AgentProjectOnlyResult {
