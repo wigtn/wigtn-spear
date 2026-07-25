@@ -159,6 +159,37 @@ export async function resetSink(sink: AgentSink, deps: AgentFetchDeps): Promise<
   }
 }
 
+/** Write a poisoned entry to the owned memory store (the injection step, FR-457). */
+export async function writeMemory(
+  writeUrl: string,
+  entry: { content: string; writer: string },
+  deps: AgentFetchDeps,
+): Promise<void> {
+  try {
+    await guardedFetch(
+      writeUrl,
+      'control',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(entry) },
+      deps,
+    );
+  } catch (error) {
+    throw new SpearExecutionError(
+      `Memory write failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+/** Clear the owned memory store between attempts. */
+export async function resetMemory(resetUrl: string, deps: AgentFetchDeps): Promise<void> {
+  try {
+    await guardedFetch(resetUrl, 'control', { method: 'POST' }, deps);
+  } catch (error) {
+    throw new SpearExecutionError(
+      `Memory reset failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 /**
  * Read a scalar `value` from an owned backend-state witness (the independent
  * observation for `agent-backend-state`). Uses the control scope.

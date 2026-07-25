@@ -64,6 +64,9 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - project-only counterfactual(FR-455): 효과가 agent 경유만 되는지(`agent-required`)
   backend 단독으로도 되는지(`backend-reachable`) 분류. indirect injection carrier
   (FR-451): 악성 지시를 agent가 읽는 untrusted 데이터에 심어 데이터 경유 injection 입증
+- MCP pack(FR-456): tool listing을 승인/실행 시점 snapshot해 rug-pull(digest drift)·
+  shadowing(이름 충돌)을 결정적 판정. memory pack(FR-457/458): 오염 항목 주입→sleeper
+  세션→나중 세션 activation 분리로 memory poisoning 입증
 
 **증거·수명주기**
 
@@ -75,10 +78,10 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 ## 아직 구현되지 않은 것
 
 - browser/WebSocket/gRPC/queue runtime 자동 mapping
-- agent: MCP shadowing/rug-pull pack, memory poisoning/sleeper pack, AgentDojo/
-  InjecAgent 벤치마크 하네스 (`run agent` CLI·OpenAI/Anthropic 프리셋·hostname
-  pinning·project-only 분리(FR-455)·indirect injection carrier(FR-451)·confused
-  deputy(agent-backend-state, OWASP LLM06)는 구현됨)
+- agent: MCP/memory용 CLI(`run mcp`/`run memory`)와 서명 evidence 번들, seed/mutation
+  생성기, AgentDojo/InjecAgent 벤치마크 하네스 (agent 공격 엔진·`run agent` CLI·provider
+  프리셋·hostname pinning·project-only(FR-455)·indirect carrier(FR-451)·confused deputy
+  (LLM06)·MCP rug-pull/shadowing(FR-456)·memory poisoning/sleeper(FR-457/458)는 구현됨)
 - race/parser/cloud 등 추가 project attack family
 - live target을 재공격하는 CI deterministic replay
 - HTTP 동시성(paired/maxConcurrency 강제), browser/DB audit witness oracle

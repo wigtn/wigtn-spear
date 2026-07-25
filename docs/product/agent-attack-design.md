@@ -60,13 +60,20 @@ benign baseline과 counterfactual에는 canary가 안 나오고, 오직 injectio
   injection이 agent의 **권한 있는 툴**을 통해 백엔드 상태를 바꾸고, owned witness가 그
   상태변화(`increased`/`changed`)를 응답과 무관하게 관측. projectOnly `backend-state-change`
   detection으로 공격자 직접 시도는 거부됨(→`agent-required`)을 함께 입증.
+- **MCP pack(FR-456)** — `verifyMcpIntegrity`: MCP tool listing을 승인/실행 두 시점에
+  snapshot해 **capability digest drift**(rug pull)나 **이름 충돌**(shadowing)을 결정적으로
+  판정. LLM judge 없이 서명 digest 비교만으로 proven/rejected.
+- **memory pack(FR-457/458)** — `runMemoryAttack`: 오염 항목을 untrusted writer로 write
+  (주입) → benign **sleeper 세션** 경과 → 나중 clean 세션에서 trigger로 activation.
+  baseline/counterfactual은 동일 activation task를 **poison 없이** 실행하므로, proven이면
+  trigger 문구가 아니라 **지속된 poison**이 원인임이 증명됨(injection↔activation 분리).
 
 ## 아직 안 된 것 / 다음 단계 (우선순위)
 
-1. **MCP pack(FR-456)** — tool shadowing / rug-pull / capability drift snapshot.
-2. **memory pack(FR-457/458)** — poisoned write → 지연 activation, provenance 손실.
-3. **seed/mutation 생성기** — LLM으로 injection carrier 변형 생성(판정 아님).
-4. **벤치마크 하네스** — AgentDojo/InjecAgent 위에 SPEAR witness-oracle을 얹어
+1. **MCP/memory CLI + evidence 번들** — 현재 라이브러리 API. `run mcp`/`run memory`
+   CLI + 서명 번들 래핑(program JSON validation 포함) 추가.
+2. **seed/mutation 생성기** — LLM으로 injection carrier 변형 생성(판정 아님).
+3. **벤치마크 하네스** — AgentDojo/InjecAgent 위에 SPEAR witness-oracle을 얹어
    "proven vs judge" 정량 비교(공개 데이터셋, legal 안전).
 
 ## 판정 원칙 (agent에도 동일 적용)

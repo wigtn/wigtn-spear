@@ -5,6 +5,20 @@
 
 ## 진행 로그
 
+- **2026-07-25 Phase 4 이어서: MCP pack(FR-456) + memory pack(FR-457/458) (`npm run check`: 124 passed).**
+  - `src/agent/mcp.ts` `verifyMcpIntegrity`: MCP tool listing을 approval/execution 두 시점
+    snapshot → `digestMcpCapabilities`로 capability digest 비교. rug pull(digest drift)·
+    shadowing(이름 충돌) 결정적 proven/rejected. LLM judge 없음. authorization 우선 검증.
+  - `src/agent/memory.ts` `runMemoryAttack`: 오염 항목을 untrusted writer로 write(주입) →
+    `sleeperSessions`만큼 benign 세션 → activation 세션(trigger). baseline/counterfactual은
+    동일 activation task를 poison 없이 실행 → proven이면 poison이 원인임 증명(injection↔
+    activation 분리, FR-458). oracle은 canary-leak/tool-egress 재사용, `deriveCausalDisposition`.
+  - `client.ts` `writeMemory`/`resetMemory`. fixture `McpServer`(benign/rug-pull/shadowing),
+    `OwnedMemory`(write/read/reset), `AgentFixture` memory 연동(`memoryReadUrl`,
+    `TRIGGER:<phrase>|reveal-secret` 포맷 파싱). `test/agent-mcp-memory.test.ts` 4 케이스.
+  - **둘 다 라이브러리 API만** — CLI(`run mcp`/`run memory`) + 서명 evidence 번들 래핑은
+    follow-up. 남음: MCP/memory CLI, seed/mutation 생성기, AgentDojo/InjecAgent 벤치마크 하네스.
+
 - **2026-07-25 Phase 4 이어서: confused deputy / backend-effect (`npm run check`: 120 passed).**
   - `agent-backend-state` oracle(`witnessUrl`+`mode: increased|changed`): injection이
     agent의 **권한 있는 툴**로 백엔드 상태를 바꾸고, owned witness가 상태변화를 응답과
