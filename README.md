@@ -67,6 +67,9 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - MCP pack(FR-456): tool listing을 승인/실행 시점 snapshot해 rug-pull(digest drift)·
   shadowing(이름 충돌)을 결정적 판정. memory pack(FR-457/458): 오염 항목 주입→sleeper
   세션→나중 세션 activation 분리로 memory poisoning 입증
+- 벤치마크 스코어카드 하네스: 프로브 corpus를 campaign으로 돌려 proven/candidate/rejected
+  집계 + independent-witness proven vs reply-only proven 분리(정직성). 냉정한 역량 상한은
+  [capability assessment](./docs/product/agent-attack-capability-assessment.md) 참고
 
 **증거·수명주기**
 
@@ -78,10 +81,11 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 ## 아직 구현되지 않은 것
 
 - browser/WebSocket/gRPC/queue runtime 자동 mapping
-- agent: MCP/memory용 CLI(`run mcp`/`run memory`)와 서명 evidence 번들, seed/mutation
-  생성기, AgentDojo/InjecAgent 벤치마크 하네스 (agent 공격 엔진·`run agent` CLI·provider
-  프리셋·hostname pinning·project-only(FR-455)·indirect carrier(FR-451)·confused deputy
-  (LLM06)·MCP rug-pull/shadowing(FR-456)·memory poisoning/sleeper(FR-457/458)는 구현됨)
+- agent: 공개 벤치마크 케이스 수입(AgentDojo/InjecAgent), 실제 LLM 라이브 실증, MCP/memory
+  CLI(`run mcp`/`run memory`)+서명 번들, gateway/OTel witness, adaptive 프로브 생성(FR-407)
+  (agent 공격 엔진 6종·`run agent` CLI·provider 프리셋·hostname pinning·project-only(FR-455)·
+  indirect carrier(FR-451)·confused deputy(LLM06)·MCP rug-pull/shadowing(FR-456)·memory
+  poisoning/sleeper(FR-457/458)·벤치마크 스코어카드 하네스는 구현됨)
 - race/parser/cloud 등 추가 project attack family
 - live target을 재공격하는 CI deterministic replay
 - HTTP 동시성(paired/maxConcurrency 강제), browser/DB audit witness oracle

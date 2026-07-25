@@ -7,3 +7,4 @@ export * from './run.js';
 export * from './evidence.js';
 export * from './mcp.js';
 export * from './memory.js';
+export * from './benchmark.js';
