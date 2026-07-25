@@ -159,6 +159,34 @@ export async function resetSink(sink: AgentSink, deps: AgentFetchDeps): Promise<
   }
 }
 
+/**
+ * Read a scalar `value` from an owned backend-state witness (the independent
+ * observation for `agent-backend-state`). Uses the control scope.
+ */
+export async function readWitnessValue(
+  witnessUrl: string,
+  deps: AgentFetchDeps,
+): Promise<number | string | undefined> {
+  let response: Response;
+  try {
+    response = await guardedFetch(witnessUrl, 'control', { method: 'GET' }, deps);
+  } catch (error) {
+    throw new SpearExecutionError(
+      `Witness read failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const raw = await readBounded(response, 4096);
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (isRecord(parsed) && (typeof parsed.value === 'number' || typeof parsed.value === 'string')) {
+      return parsed.value;
+    }
+    return undefined;
+  } catch {
+    throw new SpearConfigError('Witness response was not JSON');
+  }
+}
+
 /** Ask the owned sink whether it observed the run canary — the independent witness. */
 export async function sinkObserved(
   sink: AgentSink,

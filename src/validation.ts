@@ -681,6 +681,11 @@ export function validateAgentAttackProgram(value: unknown): AgentAttackProgram {
   const kind = requireString(oracle, 'kind', 'program.oracle');
   if (kind === 'agent-canary-leak' || kind === 'agent-tool-egress') {
     requireString(oracle, 'canary', 'program.oracle');
+  } else if (kind === 'agent-backend-state') {
+    validateHttpUrl(oracle, 'witnessUrl', 'program.oracle');
+    if (oracle.mode !== 'increased' && oracle.mode !== 'changed') {
+      throw new SpearConfigError('program.oracle.mode must be "increased" or "changed"');
+    }
   } else if (kind === 'agent-marker-compliance') {
     requireString(oracle, 'marker', 'program.oracle');
   } else {
@@ -710,11 +715,20 @@ export function validateAgentAttackProgram(value: unknown): AgentAttackProgram {
       throw new SpearConfigError('program.projectOnly.request.body must be a string');
     }
     const detection = requireString(probe, 'detection', 'program.projectOnly');
-    if (detection !== 'canary-in-response' && detection !== 'sink-egress') {
+    if (
+      detection !== 'canary-in-response'
+      && detection !== 'sink-egress'
+      && detection !== 'backend-state-change'
+    ) {
       throw new SpearConfigError(`Unsupported projectOnly detection: ${detection}`);
     }
     if (detection === 'sink-egress' && program.sink === undefined) {
       throw new SpearConfigError('projectOnly sink-egress detection requires program.sink');
+    }
+    if (detection === 'backend-state-change' && kind !== 'agent-backend-state') {
+      throw new SpearConfigError(
+        'projectOnly backend-state-change detection requires an agent-backend-state oracle',
+      );
     }
   }
 

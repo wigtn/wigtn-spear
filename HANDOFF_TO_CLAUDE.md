@@ -5,6 +5,21 @@
 
 ## 진행 로그
 
+- **2026-07-25 Phase 4 이어서: confused deputy / backend-effect (`npm run check`: 120 passed).**
+  - `agent-backend-state` oracle(`witnessUrl`+`mode: increased|changed`): injection이
+    agent의 **권한 있는 툴**로 백엔드 상태를 바꾸고, owned witness가 상태변화를 응답과
+    무관하게 관측(OWASP LLM06 excessive agency/confused deputy). `runSequence`가 agent 호출
+    전후로 witness 값 read → `backendStateMoved`로 판정. witness는 control scope+pin.
+  - projectOnly `backend-state-change` detection: 공격자 직접 요청 전후 witness를 읽어
+    변화 없으면 `agent-required`(권한 없어 403 → agent 권한이 악용됨). `readWitnessValue`
+    (`client.ts`), `backendStateMoved`(`oracle.ts`).
+  - fixture `OwnedSink`에 `POST /grant`(x-role:admin 필수, 없으면 403)·`GET /witness`
+    (grant 카운터)·reset 확장. agent `#reply`에 confused-deputy 분기(vulnerable=admin
+    권한으로 POST, fixed=거부). manifest `target.origins`에 sink origin 추가(projectOnly가
+    백엔드 권한 엔드포인트를 직접 타격). `test/agent-injection.test.ts` proven/rejected+agent-required.
+  - 남음(우선순위): MCP pack(FR-456 shadowing/rug-pull/drift), memory pack(FR-457/458),
+    seed/mutation 생성기, AgentDojo/InjecAgent 벤치마크 하네스.
+
 - **2026-07-25 Phase 4 이어서: compound / indirect injection FR-451 (`npm run check`: 119 passed).**
   - `AgentAttackProgram.carrier`(optional, owned 데이터 carrier): 악성 지시를 사용자
     메시지가 아니라 **agent가 ingest하는 untrusted 데이터**(문서/툴 결과)에 심는 **indirect

@@ -51,10 +51,11 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 
 - black-box agent 어댑터(엔드포인트 + body 템플릿 + reply JSON path), 소켓 전
   authorization scope 검증. baseline/attack/counterfactual + 3-of-2 반복 임계
-- proven급 oracle 2종: `agent-canary-leak`(심어둔 canary가 응답에 정확히 등장 →
+- proven급 oracle 3종: `agent-canary-leak`(심어둔 canary가 응답에 정확히 등장 →
   데이터/시스템프롬프트 유출), `agent-tool-egress`(owned sink이 canary를 관측 →
-  tool 호출이 프로세스 밖으로 실제 유출했음을 응답과 무관하게 입증). candidate 전용
-  `agent-marker-compliance`(self-report)는 causal proof 경로에서 명시적 거부
+  tool 호출이 프로세스 밖으로 실제 유출했음을 응답과 무관하게 입증), `agent-backend-state`
+  (owned witness가 권한 있는 백엔드 상태변화를 관측 → confused deputy/excessive agency).
+  candidate 전용 `agent-marker-compliance`(self-report)는 causal proof 경로에서 명시적 거부
 - canary redaction + Ed25519 서명 agent evidence bundle. 취약/수정 agent + owned
   sink fixture로 proven/rejected 실증. 설계는 `docs/product/agent-attack-design.md`
 - `spear run agent` CLI(authorization→검증→서명 번들, proven=exit 1). 실제 고객
@@ -74,10 +75,10 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 ## 아직 구현되지 않은 것
 
 - browser/WebSocket/gRPC/queue runtime 자동 mapping
-- agent: backend-effect(indirect injection→tool arg→기존 HTTP sink 상태변화 witness),
-  MCP shadowing/rug-pull pack, memory poisoning/sleeper pack (`run agent`
-  CLI·OpenAI/Anthropic 프리셋·hostname pinning·project-only 분리(FR-455)·indirect
-  injection carrier(FR-451)는 구현됨)
+- agent: MCP shadowing/rug-pull pack, memory poisoning/sleeper pack, AgentDojo/
+  InjecAgent 벤치마크 하네스 (`run agent` CLI·OpenAI/Anthropic 프리셋·hostname
+  pinning·project-only 분리(FR-455)·indirect injection carrier(FR-451)·confused
+  deputy(agent-backend-state, OWASP LLM06)는 구현됨)
 - race/parser/cloud 등 추가 project attack family
 - live target을 재공격하는 CI deterministic replay
 - HTTP 동시성(paired/maxConcurrency 강제), browser/DB audit witness oracle

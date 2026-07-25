@@ -11,11 +11,12 @@ import {
   callAgent,
   directAttackerRequest,
   type FetchImpl,
+  readWitnessValue,
   resetSink,
   setCarrier,
   sinkObserved,
 } from './client.js';
-import { evaluateAgentOracle, oracleEvidenceGrade } from './oracle.js';
+import { backendStateMoved, evaluateAgentOracle, oracleEvidenceGrade } from './oracle.js';
 import type {
   AgentAttackProgram,
   AgentMessageSpec,
@@ -61,6 +62,11 @@ async function runSequence(
     const content = role === 'attack' ? program.carrier.maliciousContent : program.carrier.benignContent;
     await setCarrier(program.carrier, content, deps);
   }
+  // Confused deputy (agent-backend-state): read the independent witness before and
+  // after the agent acts, so a privileged backend mutation is observed out of process.
+  const stateBefore = program.oracle.kind === 'agent-backend-state'
+    ? await readWitnessValue(program.oracle.witnessUrl, deps)
+    : undefined;
 
   const { reply, status } = await callAgent(program.target, spec.message, deps);
   const turn: AgentTurn = {
@@ -76,9 +82,14 @@ async function runSequence(
   if (needsSink && program.sink && 'canary' in program.oracle) {
     observed = await sinkObserved(program.sink, program.oracle.canary, deps);
   }
+  const stateAfter = program.oracle.kind === 'agent-backend-state'
+    ? await readWitnessValue(program.oracle.witnessUrl, deps)
+    : undefined;
   const predicateObserved = evaluateAgentOracle(program.oracle, {
     replies: [reply],
     sinkObservedCanary: observed,
+    stateBefore,
+    stateAfter,
   });
   return {
     sequenceId: `${role}-${sha256Digest(spec.message).slice(7, 19)}`,
@@ -108,6 +119,12 @@ async function runProjectOnly(
     const response = await directAttackerRequest(probe.request, deps);
     status = response.status;
     effectObserved = await sinkObserved(program.sink, canary, deps);
+  } else if (probe.detection === 'backend-state-change' && program.oracle.kind === 'agent-backend-state') {
+    const before = await readWitnessValue(program.oracle.witnessUrl, deps);
+    const response = await directAttackerRequest(probe.request, deps);
+    status = response.status;
+    const after = await readWitnessValue(program.oracle.witnessUrl, deps);
+    effectObserved = backendStateMoved(program.oracle.mode, before, after);
   } else {
     const response = await directAttackerRequest(probe.request, deps);
     status = response.status;
@@ -160,6 +177,9 @@ export async function runAgentAttack(options: AgentRunOptions): Promise<AgentRun
     if (program.carrier) {
       assertPinnableOrigin(program.carrier.setUrl, 'Agent carrier set URL');
     }
+    if (program.oracle.kind === 'agent-backend-state') {
+      assertPinnableOrigin(program.oracle.witnessUrl, 'Agent backend-state witness URL');
+    }
     deps = { guard, fetchImpl: options.fetchImpl };
   } else {
     // Real runs pin each origin to its resolved IPs and connect through an undici
@@ -171,6 +191,9 @@ export async function runAgentAttack(options: AgentRunOptions): Promise<AgentRun
     }
     if (program.carrier) {
       await guard.pin(program.carrier.setUrl, 'control');
+    }
+    if (program.oracle.kind === 'agent-backend-state') {
+      await guard.pin(program.oracle.witnessUrl, 'control');
     }
     deps = { guard, dispatcher: createPinnedDispatcher(guard.pins) };
   }
