@@ -54,6 +54,11 @@ function redactProgram(program: AgentAttackProgram): AgentAttackProgram {
     }
     scrubHeaders(clone.projectOnly.request.headers);
   }
+  if (clone.carrier) {
+    // The malicious carrier content is the injection payload; scrub any canary it
+    // embeds (the benign content is inert and kept for the counterfactual record).
+    clone.carrier.maliciousContent = scrub(clone.carrier.maliciousContent);
+  }
   return clone;
 }
 

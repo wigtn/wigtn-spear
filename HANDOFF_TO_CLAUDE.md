@@ -5,6 +5,26 @@
 
 ## 진행 로그
 
+- **2026-07-25 Phase 4 이어서: compound / indirect injection FR-451 (`npm run check`: 119 passed).**
+  - `AgentAttackProgram.carrier`(optional, owned 데이터 carrier): 악성 지시를 사용자
+    메시지가 아니라 **agent가 ingest하는 untrusted 데이터**(문서/툴 결과)에 심는 **indirect
+    prompt injection**. `runSequence`가 phase별로 `setCarrier`로 내용 toggle(attack=malicious,
+    baseline/counterfactual=benign) → injection이 데이터 경유임을 입증. carrier는 control
+    scope+pin. `AgentRunResult.injectionVector`=`indirect-carrier`. maliciousContent는
+    evidence에서 redact(`src/agent/evidence.ts`).
+  - `src/agent/client.ts` `setCarrier`, `run.ts` carrier 배선 + pin, `validation.ts` carrier
+    검증. fixture에 `OwnedCarrier` 서버(POST /set·GET /doc) + agent의 "문서 읽고 따르기"
+    분기(vulnerable=fetched 내용을 지시로 따름, fixed=데이터로만 취급). `test/agent-injection.test.ts`
+    indirect proven/rejected. **주의**: 메시지 끝 URL 뒤 마침표가 URL 매칭에 포함되니 URL은
+    문장 끝에 두지 말 것.
+  - 벤치마크 리서치 완료(별도): AgentDojo/InjecAgent/ASB/AgentHarm/tau-bench(agentic,
+    effect-verify), garak/PyRIT/promptfoo(scanner), MCPTox/MCP-SafetyBench/MCP-Scan(MCP),
+    Gray Swan Arena·HackAPrompt·Lakera Gandalf(leaderboard), OWASP LLM/Agentic Top10·MITRE
+    ATLAS·NIST AI 100-2e2025(taxonomy). SPEAR 차별점: 대부분 LLM-judge/string-match on 출력인데
+    SPEAR는 out-of-process witness+counterfactual+replay로 실제 effect 입증.
+  - 남음(우선순위): backend-effect(indirect→tool arg→기존 HTTP sink 상태변화 witness),
+    MCP pack(FR-456), memory pack(FR-457/458), seed/mutation 생성기.
+
 - **2026-07-25 Phase 4 이어서: project-only counterfactual 분리 FR-455 (`npm run check`: 118 passed).**
   - `AgentAttackProgram.projectOnly`(optional): agent 없이 동일 효과를 시도하는 직접 요청
     (`request` + `detection`: `canary-in-response`/`sink-egress`). `runAgentAttack`가 attack

@@ -51,11 +51,16 @@ benign baseline과 counterfactual에는 canary가 안 나오고, 오직 injectio
   효과를 직접 시도하는 요청 + detection(`canary-in-response`/`sink-egress`). 결과를
   `agent-required`(agent 경유만 됨 → 진짜 AI 취약점) vs `backend-reachable`(백엔드 단독
   가능 → misconfig)로 분류. `AgentRunResult.projectOnly`에 기록, evidence에서 redact.
+- **compound / indirect injection(FR-451)** — `program.carrier`(owned 데이터 carrier):
+  악성 지시가 사용자 메시지가 아니라 **agent가 읽어들이는 untrusted 데이터**(문서/툴
+  결과)에 심어짐. SPEAR가 phase별로 carrier 내용을 toggle(baseline/counterfactual=benign,
+  attack=malicious)해 injection이 데이터를 통해 흘렀음을 입증. `AgentRunResult.injectionVector`
+  =`indirect-carrier`. maliciousContent는 evidence에서 redact.
 
 ## 아직 안 된 것 / 다음 단계 (우선순위)
 
-1. **compound chain** — injection → tool arg → 기존 HTTP sink(SSRF/BOLA)까지 한
-   candidate로 연결. 기존 causal HTTP 엔진 재사용률 높음(ROI 큼).
+1. **backend-effect 확장** — indirect injection → tool arg가 기존 HTTP sink(SSRF/BOLA)의
+   실제 backend 상태변화까지 도달하는 것을 owned control 채널로 witness(confused deputy).
 2. **MCP pack(FR-456)** — tool shadowing / rug-pull / capability drift snapshot.
 3. **memory pack(FR-457/458)** — poisoned write → 지연 activation, provenance 손실.
 4. **seed/mutation 생성기** — LLM으로 injection carrier 변형 생성(판정 아님).

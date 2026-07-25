@@ -717,5 +717,12 @@ export function validateAgentAttackProgram(value: unknown): AgentAttackProgram {
       throw new SpearConfigError('projectOnly sink-egress detection requires program.sink');
     }
   }
+
+  if (program.carrier !== undefined) {
+    const carrier = requireRecord(program.carrier, 'program.carrier');
+    validateHttpUrl(carrier, 'setUrl', 'program.carrier');
+    requireString(carrier, 'benignContent', 'program.carrier');
+    requireString(carrier, 'maliciousContent', 'program.carrier');
+  }
   return program as unknown as AgentAttackProgram;
 }

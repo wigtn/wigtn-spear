@@ -60,6 +60,9 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - `spear run agent` CLI(authorization→검증→서명 번들, proven=exit 1). 실제 고객
   hostname 엔드포인트도 undici socket pinning으로 DNS-rebinding 안전. OpenAI/Anthropic
   provider 프리셋(API 키는 evidence에서 redact)
+- project-only counterfactual(FR-455): 효과가 agent 경유만 되는지(`agent-required`)
+  backend 단독으로도 되는지(`backend-reachable`) 분류. indirect injection carrier
+  (FR-451): 악성 지시를 agent가 읽는 untrusted 데이터에 심어 데이터 경유 injection 입증
 
 **증거·수명주기**
 
@@ -71,9 +74,10 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 ## 아직 구현되지 않은 것
 
 - browser/WebSocket/gRPC/queue runtime 자동 mapping
-- agent: compound chain(injection→tool arg→기존 HTTP sink), MCP shadowing/rug-pull
-  pack, memory poisoning/sleeper pack, MCP tool gateway witness (`run agent`
-  CLI·OpenAI/Anthropic 프리셋·hostname pinning·project-only 분리(FR-455)는 구현됨)
+- agent: backend-effect(indirect injection→tool arg→기존 HTTP sink 상태변화 witness),
+  MCP shadowing/rug-pull pack, memory poisoning/sleeper pack (`run agent`
+  CLI·OpenAI/Anthropic 프리셋·hostname pinning·project-only 분리(FR-455)·indirect
+  injection carrier(FR-451)는 구현됨)
 - race/parser/cloud 등 추가 project attack family
 - live target을 재공격하는 CI deterministic replay
 - HTTP 동시성(paired/maxConcurrency 강제), browser/DB audit witness oracle
