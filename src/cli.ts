@@ -42,12 +42,15 @@ import type {
   UnsignedPackRegistry,
 } from './types.js';
 import {
+  validateAgentAttackProgram,
   validateAttackProgram,
   validateAuthorizationManifest,
   validateCausalHttpAttackProgram,
   validatePackManifest,
+  validateTargetProfile,
   validateTrustStore,
 } from './validation.js';
+import { runAgentAttack, signAgentEvidence } from './agent/index.js';
 import {
   isRecord,
   readJsonFile,
@@ -148,6 +151,17 @@ Active causal run (emits a signed evidence bundle):
     -changed/-delta-exceeds, partial-effect, canary-egress) require twin.control
     (resetUrl/snapshotUrl) on an owned IP-literal origin.
     --minimize drops attack steps that are not required for the proven predicate.
+
+Active agent run (prompt-injection / tool-egress; emits a signed evidence bundle):
+  spear run agent --manifest <file> --trust-store <file> --profile <file>
+                  --program <agent.program.json>
+                  --evidence-private-key <file> --evidence-key-id <id>
+                  --acknowledge-authorization [--output <bundle.json>]
+    Proves an effect independently: agent-canary-leak (planted secret appears
+    verbatim in the reply) or agent-tool-egress (an owned sink observes the run
+    canary — a tool call exfiltrated it, regardless of what the agent replied).
+    Self-reported marker signals are candidate-only and rejected here. Agent
+    targets are structurally nondeterministic: 3-of-2 replay threshold (FR-603).
 
 Evidence (signed causal bundles):
   spear evidence verify --bundle <file> --trust-store <file> [--output <file>]
@@ -443,6 +457,37 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       minimizedGraphPath,
       retentionDays,
     );
+    await emit(bundle, parsed);
+    if (run.disposition === 'proven') return 1;
+    if (run.disposition === 'error') return 2;
+    return 0;
+  }
+  if (topic === 'run' && action === 'agent') {
+    const [manifest, trustStore, profileInput, programInput] = await Promise.all([
+      readJsonFile<unknown>(requiredOption(parsed, 'manifest')),
+      readJsonFile<unknown>(requiredOption(parsed, 'trust-store')),
+      readJsonFile<unknown>(requiredOption(parsed, 'profile')),
+      readJsonFile<unknown>(requiredOption(parsed, 'program')),
+    ]);
+    const profile = validateTargetProfile(profileInput);
+    const evidenceKeyPem = await readFile(
+      resolve(requiredOption(parsed, 'evidence-private-key')),
+      'utf8',
+    );
+    // Authorization, scope, and program validation all happen inside runAgentAttack
+    // before any request reaches the agent endpoint.
+    const run = await runAgentAttack({
+      manifest,
+      trustStore,
+      program: programInput,
+      actualBuildDigest: profile.target.buildDigest,
+      acknowledgeAuthorization: parsed.options.get('acknowledge-authorization') === true,
+    });
+    const program = validateAgentAttackProgram(programInput);
+    const bundle = signAgentEvidence(run, program, {
+      privateKeyPem: evidenceKeyPem,
+      keyId: requiredOption(parsed, 'evidence-key-id'),
+    });
     await emit(bundle, parsed);
     if (run.disposition === 'proven') return 1;
     if (run.disposition === 'error') return 2;

@@ -5,6 +5,58 @@
 
 ## 진행 로그
 
+- **2026-07-25 Phase 4 이어서: agent CLI + hostname pinning + provider 프리셋 (`npm run check`: 116 passed).**
+  - **`spear run agent`** CLI 추가(`src/cli.ts`): manifest/trust-store/profile/program +
+    evidence 키 → 서명된 agent evidence bundle emit. proven=exit 1, error=exit 2, 그외 0.
+    `validateAgentAttackProgram`(`src/validation.ts`): agent 프로그램은 구조적으로
+    비결정적이므로 HTTP 규칙의 역 — `nondeterministic:true` 강제 + FR-603 완화 임계
+    (repetitions≥3, minimumAttackSuccesses≥2). `test/run-agent-cli.test.ts` E2E(proven/rejected).
+    예제 `examples/agent.program.json`.
+  - **authorization 우선화**: `runAgentAttack`가 이제 raw manifest+trustStore+acknowledge를
+    받아 `verifyAuthorization`(서명/scope/expiry/capability `run:agent`/build binding)을
+    **네트워크 전에** 통과시킨 뒤에만 엔드포인트 접촉. `actualBuildDigest`는 target profile에서.
+  - **hostname pinning(핵심)**: 실제 고객 엔드포인트는 hostname이므로, 기존 `src/pinning.ts`
+    (`createPinnedDispatcher`)를 agent client에 연결. fetchImpl 미주입 시 origin을 `guard.pin`
+    → undici pinned dispatcher로 연결 + 매 요청 `guard.revalidate`(DNS rebinding 차단).
+    fetchImpl 주입 경로만 IP-literal 강제(http-runner와 parity). `src/agent/client.ts` 재작성.
+  - **provider 프리셋**(`src/agent/providers.ts`): `openAiChatTarget`/`anthropicMessagesTarget`
+    → `AgentTarget` 구성(bodyTemplate `{{message}}` + replyJsonPath). **API 키는 evidence에서
+    redact**(`SECRET_HEADERS`: authorization/cookie/x-api-key/api-key)되고 env 주입 권장.
+    `test/agent-providers.test.ts`(프리셋 유효성 + 키 미유출 실증).
+  - **아직 남음(우선순위)**: project-only counterfactual 분리(FR-455) — agent 경유 필요
+    vs backend 단독 구분; compound chain(injection→tool arg→기존 HTTP SSRF/BOLA sink);
+    MCP pack(FR-456 shadowing/rug-pull); memory pack(FR-457/458 poisoning/sleeper).
+
+- **2026-07-25 Phase 4 착수: agent injection attack vertical (`npm run check`: 112 passed).**
+  - 배경: 고객사 authorized pentest 비즈니스(고객 AI/agent를 owned/authorized로 공격).
+    실제 black-box agent 대상이라 fixture 순환논리 없이 발견 가능. 차별점은 payload가
+    아니라 **증거 등급** — self-report(모델 텍스트)로 판정 안 하고 독립 witness가
+    실제 effect를 관측했을 때만 `proven`(FR-408/FR-453).
+  - 신규 `src/agent/`:
+    - `types.ts` — `AgentTarget`(엔드포인트+body 템플릿+reply JSON path), `AgentSink`,
+      `AgentAttackProgram`, `AgentRunResult`, oracle union.
+    - `client.ts` — `callAgent`(소켓 전 `DestinationGuard` scope 검증, byte budget,
+      redirect:error), `resetSink`/`sinkObserved`(owned witness 질의).
+    - `oracle.ts` — `agent-canary-leak`(exact-match, proven급), `agent-tool-egress`
+      (owned sink 관측, proven급), `agent-marker-compliance`(self-report, candidate 전용).
+      `oracleEvidenceGrade`.
+    - `run.ts` — `runAgentAttack`: baseline/attack×N/counterfactual + 3-of-2(FR-603),
+      기존 `deriveCausalDisposition` 재사용. marker oracle은 명시적 거부. canary redaction
+      + `assertNoRawSecrets`.
+    - `evidence.ts` — `signAgentEvidence`/`verifyAgentEvidence`: canary-redacted Ed25519
+      번들, redactedProgramDigest 무결성.
+    - `probes.ts` — `PROBE_CATALOG`(direct extraction / role confusion / indirect
+      tool-egress), 각 프로브가 자기 입증 oracle 선언.
+  - fixture `test/fixtures/agent-fixture.ts`: 취약/수정 agent(+system-prompt secret,
+    web-tool 시뮬레이션) + owned sink 서버. `test/agent-injection.test.ts`: leak
+    proven/rejected, tool-egress proven(응답 아닌 sink이 입증)/rejected, marker 거부.
+  - `src/index.ts`에 `./agent/index.js` barrel export. 설계·로드맵은
+    `docs/product/agent-attack-design.md`.
+  - **아직 남음(우선순위)**: CLI `run agent`(program JSON validation), 실 provider
+    어댑터(OpenAI/Anthropic + MCP tool gateway witness; LLM은 seed/fixture 전용, 판정
+    금지), project-only counterfactual 분리(FR-455), compound chain(injection→tool
+    arg→기존 HTTP sink), MCP pack(FR-456), memory pack(FR-457/458).
+
 - **2026-07-23 Step A 완료 (`npm run check`: 31 passed).**
   - Critical #1 해소: `EvidenceBundle`에 Ed25519 `signature` 추가.
     `createEvidenceBundle(run, program, signingKey, now)` /
