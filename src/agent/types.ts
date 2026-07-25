@@ -59,6 +59,35 @@ export interface AgentMessageSpec {
   message: string;
 }
 
+/**
+ * A direct attacker action (no agent involved) that attempts the SAME forbidden
+ * effect. Running it alongside the agent attack tells us whether the agent was
+ * actually necessary (FR-455): if the effect reproduces here too, the backend is
+ * exploitable on its own and the finding is not agent-specific.
+ */
+export interface AgentProjectOnlyProbe {
+  request: {
+    url: string;
+    method?: 'GET' | 'POST';
+    headers?: Record<string, string>;
+    body?: string;
+  };
+  /** How the effect is detected on the direct path. `sink-egress` needs the owned sink. */
+  detection: 'canary-in-response' | 'sink-egress';
+}
+
+export interface AgentProjectOnlyResult {
+  attempted: true;
+  effectObserved: boolean;
+  status: number;
+  /**
+   * `backend-reachable`: the direct path reproduced the effect — the agent was not
+   * required (treat as a backend finding). `agent-required`: only the agent-mediated
+   * path produced it — the genuinely agent-specific finding.
+   */
+  classification: 'agent-required' | 'backend-reachable';
+}
+
 export interface AgentAttackProgram {
   schemaVersion: '3.0';
   kind: 'agent-attack-program';
@@ -85,6 +114,8 @@ export interface AgentAttackProgram {
   };
   /** Required for the `agent-tool-egress` oracle: the owned witness sink. */
   sink?: AgentSink;
+  /** Optional FR-455 control: attempt the same effect directly, without the agent. */
+  projectOnly?: AgentProjectOnlyProbe;
 }
 
 export interface AgentTurn {
@@ -121,5 +152,7 @@ export interface AgentRunResult {
   baseline: AgentSequenceReceipt;
   attacks: AgentSequenceReceipt[];
   counterfactual: AgentSequenceReceipt;
+  /** FR-455: present when a project-only probe ran, classifying agent-required vs backend-reachable. */
+  projectOnly?: AgentProjectOnlyResult;
   reason: string;
 }

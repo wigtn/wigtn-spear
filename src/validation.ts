@@ -695,5 +695,27 @@ export function validateAgentAttackProgram(value: unknown): AgentAttackProgram {
   if (kind === 'agent-tool-egress' && program.sink === undefined) {
     throw new SpearConfigError('agent-tool-egress oracle requires program.sink (an owned witness)');
   }
+
+  if (program.projectOnly !== undefined) {
+    const probe = requireRecord(program.projectOnly, 'program.projectOnly');
+    const request = requireRecord(probe.request, 'program.projectOnly.request');
+    validateHttpUrl(request, 'url', 'program.projectOnly.request');
+    if (request.method !== undefined && request.method !== 'GET' && request.method !== 'POST') {
+      throw new SpearConfigError('program.projectOnly.request.method must be "GET" or "POST"');
+    }
+    if (request.headers !== undefined) {
+      validateSafeHeaders(request.headers, 'program.projectOnly.request.headers');
+    }
+    if (request.body !== undefined && typeof request.body !== 'string') {
+      throw new SpearConfigError('program.projectOnly.request.body must be a string');
+    }
+    const detection = requireString(probe, 'detection', 'program.projectOnly');
+    if (detection !== 'canary-in-response' && detection !== 'sink-egress') {
+      throw new SpearConfigError(`Unsupported projectOnly detection: ${detection}`);
+    }
+    if (detection === 'sink-egress' && program.sink === undefined) {
+      throw new SpearConfigError('projectOnly sink-egress detection requires program.sink');
+    }
+  }
   return program as unknown as AgentAttackProgram;
 }

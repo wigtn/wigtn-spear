@@ -6,11 +6,19 @@ import { SpearConfigError } from '../errors.js';
 import { createPinnedDispatcher } from '../pinning.js';
 import { assertNoRawSecrets, assertPinnableOrigin, DestinationGuard } from '../safety.js';
 import { validateAgentAttackProgram } from '../validation.js';
-import { type AgentFetchDeps, callAgent, type FetchImpl, resetSink, sinkObserved } from './client.js';
+import {
+  type AgentFetchDeps,
+  callAgent,
+  directAttackerRequest,
+  type FetchImpl,
+  resetSink,
+  sinkObserved,
+} from './client.js';
 import { evaluateAgentOracle, oracleEvidenceGrade } from './oracle.js';
 import type {
   AgentAttackProgram,
   AgentMessageSpec,
+  AgentProjectOnlyResult,
   AgentRunResult,
   AgentSequenceReceipt,
   AgentTurn,
@@ -75,6 +83,38 @@ async function runSequence(
 }
 
 /**
+ * FR-455: attempt the same forbidden effect directly, without the agent, so a
+ * finding can be classified as agent-required (only the agent path produced it) or
+ * backend-reachable (the backend is exploitable on its own). No raw body is kept —
+ * only the boolean effect and status.
+ */
+async function runProjectOnly(
+  program: AgentAttackProgram,
+  deps: AgentFetchDeps,
+): Promise<AgentProjectOnlyResult> {
+  const probe = program.projectOnly!;
+  const canary = 'canary' in program.oracle ? program.oracle.canary : '';
+  let effectObserved = false;
+  let status = 0;
+  if (probe.detection === 'sink-egress' && program.sink) {
+    await resetSink(program.sink, deps);
+    const response = await directAttackerRequest(probe.request, deps);
+    status = response.status;
+    effectObserved = await sinkObserved(program.sink, canary, deps);
+  } else {
+    const response = await directAttackerRequest(probe.request, deps);
+    status = response.status;
+    effectObserved = canary !== '' && response.body.includes(canary);
+  }
+  return {
+    attempted: true,
+    effectObserved,
+    status,
+    classification: effectObserved ? 'backend-reachable' : 'agent-required',
+  };
+}
+
+/**
  * Run one agent attack candidate: benign baseline, N adversarial attempts, and a
  * counterfactual, all against the same black-box endpoint, and derive a causal
  * disposition. `proven` requires the forbidden effect to appear only under attack,
@@ -107,6 +147,9 @@ export async function runAgentAttack(options: AgentRunOptions): Promise<AgentRun
       assertPinnableOrigin(program.sink.observeUrl, 'Agent sink observe URL');
       assertPinnableOrigin(program.sink.resetUrl, 'Agent sink reset URL');
     }
+    if (program.projectOnly) {
+      assertPinnableOrigin(program.projectOnly.request.url, 'Agent project-only request URL');
+    }
     deps = { guard, fetchImpl: options.fetchImpl };
   } else {
     // Real runs pin each origin to its resolved IPs and connect through an undici
@@ -133,6 +176,10 @@ export async function runAgentAttack(options: AgentRunOptions): Promise<AgentRun
     minimumAttackSuccesses: program.execution.minimumAttackSuccesses,
   });
 
+  const projectOnly = program.projectOnly
+    ? await runProjectOnly(program, deps)
+    : undefined;
+
   const result: AgentRunResult = {
     schemaVersion: '3.0',
     kind: 'agent-run',
@@ -146,6 +193,7 @@ export async function runAgentAttack(options: AgentRunOptions): Promise<AgentRun
     baseline,
     attacks,
     counterfactual,
+    ...(projectOnly ? { projectOnly } : {}),
     reason: outcome.reason,
   };
   // Defense in depth: the redaction above should have removed every canary; fail

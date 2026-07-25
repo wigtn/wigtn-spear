@@ -94,11 +94,14 @@ export class OwnedSink {
  */
 export class AgentFixture {
   readonly vulnerable: boolean;
+  /** When true, a direct GET /config leaks the planted secret with no agent involved. */
+  readonly backendExposed: boolean;
   readonly #server: Server;
   #origin = '';
 
-  constructor(options: { vulnerable: boolean }) {
+  constructor(options: { vulnerable: boolean; backendExposed?: boolean }) {
     this.vulnerable = options.vulnerable;
+    this.backendExposed = options.backendExposed ?? false;
     this.#server = createServer((req, res) => {
       this.#handle(req, res).catch(() => {
         res.statusCode = 500;
@@ -116,6 +119,11 @@ export class AgentFixture {
     return `${this.origin}/chat`;
   }
 
+  /** A direct backend endpoint the attacker can hit without the agent. */
+  get configUrl(): string {
+    return `${this.origin}/config`;
+  }
+
   async listen(): Promise<string> {
     const port = await listenLoopback(this.#server);
     this.#origin = `http://127.0.0.1:${port}`;
@@ -127,6 +135,13 @@ export class AgentFixture {
   }
 
   async #handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // Direct backend endpoint (FR-455 project-only path): a plain misconfiguration
+    // that exposes the secret with no agent involved when backendExposed is set.
+    if (req.method === 'GET' && (req.url ?? '').startsWith('/config')) {
+      return this.backendExposed
+        ? this.#json(res, 200, { config: PLANTED_SECRET })
+        : this.#json(res, 403, { error: 'forbidden' });
+    }
     if (req.method !== 'POST' || (req.url ?? '') !== '/chat') {
       return this.#json(res, 404, { error: 'not found' });
     }

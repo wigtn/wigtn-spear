@@ -98,6 +98,28 @@ export async function callAgent(
   return { reply, status: response.status, raw };
 }
 
+/**
+ * Issue a direct attacker request against the target (no agent involved) — the
+ * FR-455 project-only path. Scope and pinning are enforced like any target call.
+ */
+export async function directAttackerRequest(
+  spec: { url: string; method?: 'GET' | 'POST'; headers?: Record<string, string>; body?: string },
+  deps: AgentFetchDeps,
+  maxBytes = DEFAULT_MAX_RESPONSE_BYTES,
+): Promise<{ status: number; body: string }> {
+  const response = await guardedFetch(
+    spec.url,
+    'target',
+    {
+      method: spec.method ?? 'GET',
+      ...(spec.headers ? { headers: spec.headers } : {}),
+      ...(spec.body !== undefined ? { body: spec.body } : {}),
+    },
+    deps,
+  );
+  return { status: response.status, body: await readBounded(response, maxBytes) };
+}
+
 /** Reset the owned witness sink to a clean state between attempts. */
 export async function resetSink(sink: AgentSink, deps: AgentFetchDeps): Promise<void> {
   try {

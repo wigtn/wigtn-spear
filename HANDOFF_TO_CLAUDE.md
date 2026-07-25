@@ -5,6 +5,18 @@
 
 ## 진행 로그
 
+- **2026-07-25 Phase 4 이어서: project-only counterfactual 분리 FR-455 (`npm run check`: 118 passed).**
+  - `AgentAttackProgram.projectOnly`(optional): agent 없이 동일 효과를 시도하는 직접 요청
+    (`request` + `detection`: `canary-in-response`/`sink-egress`). `runAgentAttack`가 attack
+    이후 실행해 `AgentRunResult.projectOnly`로 분류: `agent-required`(agent 경유만 효과 →
+    진짜 AI 취약점) vs `backend-reachable`(백엔드 단독 가능 → misconfig). 직접 요청도
+    scope/pin 강제, raw body 미저장(effect boolean+status만), program은 evidence에서 redact.
+  - `validation.ts` projectOnly 검증(url/method/headers/body/detection; sink-egress는 sink 필수).
+    fixture에 직접 `/config` 엔드포인트(`backendExposed`) 추가. `test/agent-injection.test.ts`에
+    agent-required/backend-reachable 2케이스. **PR #15 브랜치 `feat/agent-attack-vertical`에 포함.**
+  - 남음(우선순위): compound chain(injection→tool arg→기존 HTTP sink), MCP pack(FR-456),
+    memory pack(FR-457/458), seed/mutation 생성기.
+
 - **2026-07-25 Phase 4 이어서: agent CLI + hostname pinning + provider 프리셋 (`npm run check`: 116 passed).**
   - **`spear run agent`** CLI 추가(`src/cli.ts`): manifest/trust-store/profile/program +
     evidence 키 → 서명된 agent evidence bundle emit. proven=exit 1, error=exit 2, 그외 0.

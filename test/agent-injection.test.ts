@@ -171,6 +171,66 @@ test('tool-mediated egress is proven by the owned sink, not the agent reply', as
   }
 });
 
+test('project-only counterfactual classifies an injection-only leak as agent-required', async () => {
+  const { privateKeyPem, trustStore } = testKeys();
+  const sink = new OwnedSink();
+  await sink.listen();
+  // Vulnerable to injection, but the direct /config endpoint is NOT exposed.
+  const agent = new AgentFixture({ vulnerable: true, backendExposed: false });
+  await agent.listen();
+  try {
+    const program: AgentAttackProgram = {
+      ...leakProgram(agent.chatUrl),
+      projectOnly: {
+        request: { url: agent.configUrl, method: 'GET' },
+        detection: 'canary-in-response',
+      },
+    };
+    const run = await runAgentAttack({
+      manifest: manifestFor(privateKeyPem, agent.origin, sink.origin),
+      trustStore,
+      program,
+      actualBuildDigest: BUILD_DIGEST,
+      acknowledgeAuthorization: true,
+    });
+    assert.equal(run.disposition, 'proven');
+    assert.equal(run.projectOnly?.effectObserved, false);
+    assert.equal(run.projectOnly?.classification, 'agent-required');
+  } finally {
+    await Promise.all([agent.close(), sink.close()]);
+  }
+});
+
+test('project-only counterfactual classifies a directly-reachable leak as backend-reachable', async () => {
+  const { privateKeyPem, trustStore } = testKeys();
+  const sink = new OwnedSink();
+  await sink.listen();
+  // The direct /config endpoint leaks the secret with no agent needed.
+  const agent = new AgentFixture({ vulnerable: true, backendExposed: true });
+  await agent.listen();
+  try {
+    const program: AgentAttackProgram = {
+      ...leakProgram(agent.chatUrl),
+      projectOnly: {
+        request: { url: agent.configUrl, method: 'GET' },
+        detection: 'canary-in-response',
+      },
+    };
+    const run = await runAgentAttack({
+      manifest: manifestFor(privateKeyPem, agent.origin, sink.origin),
+      trustStore,
+      program,
+      actualBuildDigest: BUILD_DIGEST,
+      acknowledgeAuthorization: true,
+    });
+    assert.equal(run.disposition, 'proven');
+    assert.equal(run.projectOnly?.effectObserved, true);
+    assert.equal(run.projectOnly?.classification, 'backend-reachable');
+  } finally {
+    await Promise.all([agent.close(), sink.close()]);
+  }
+});
+
 test('a self-reported marker signal cannot be run through the causal proof path', async () => {
   const { privateKeyPem, trustStore } = testKeys();
   const agent = new AgentFixture({ vulnerable: true });

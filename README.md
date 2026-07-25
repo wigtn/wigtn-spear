@@ -71,10 +71,9 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 ## 아직 구현되지 않은 것
 
 - browser/WebSocket/gRPC/queue runtime 자동 mapping
-- agent: project-only counterfactual 분리(FR-455), compound chain(injection→tool
-  arg→기존 HTTP sink), MCP shadowing/rug-pull pack, memory poisoning/sleeper pack,
-  MCP tool gateway witness (`run agent` CLI·OpenAI/Anthropic 프리셋·hostname
-  pinning은 구현됨)
+- agent: compound chain(injection→tool arg→기존 HTTP sink), MCP shadowing/rug-pull
+  pack, memory poisoning/sleeper pack, MCP tool gateway witness (`run agent`
+  CLI·OpenAI/Anthropic 프리셋·hostname pinning·project-only 분리(FR-455)는 구현됨)
 - race/parser/cloud 등 추가 project attack family
 - live target을 재공격하는 CI deterministic replay
 - HTTP 동시성(paired/maxConcurrency 강제), browser/DB audit witness oracle

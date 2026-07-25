@@ -40,10 +40,19 @@ function redactProgram(program: AgentAttackProgram): AgentAttackProgram {
   clone.attack.message = scrub(clone.attack.message);
   clone.counterfactual.message = scrub(clone.counterfactual.message);
   // Provider auth (API keys/session cookies) must never enter a stored bundle.
-  if (clone.target.headers) {
-    for (const name of Object.keys(clone.target.headers)) {
-      if (SECRET_HEADERS.has(name.toLowerCase())) clone.target.headers[name] = '[REDACTED]';
+  const scrubHeaders = (headers?: Record<string, string>): void => {
+    if (!headers) return;
+    for (const name of Object.keys(headers)) {
+      if (SECRET_HEADERS.has(name.toLowerCase())) headers[name] = '[REDACTED]';
     }
+  };
+  scrubHeaders(clone.target.headers);
+  if (clone.projectOnly) {
+    clone.projectOnly.request.url = scrub(clone.projectOnly.request.url);
+    if (clone.projectOnly.request.body !== undefined) {
+      clone.projectOnly.request.body = scrub(clone.projectOnly.request.body);
+    }
+    scrubHeaders(clone.projectOnly.request.headers);
   }
   return clone;
 }

@@ -47,16 +47,18 @@ benign baseline과 counterfactual에는 canary가 안 나오고, 오직 injectio
   undici dispatcher로 pin + 매 요청 revalidate → DNS-rebinding 안전. IP-literal 제약 해소.
 - **provider 프리셋** — `openAiChatTarget`/`anthropicMessagesTarget`. API 키는 evidence
   bundle에서 redact(env 주입 권장). LLM은 target/seed용이며 **판정엔 여전히 금지**.
+- **project-only counterfactual 분리(FR-455)** — `program.projectOnly`: agent 없이 동일
+  효과를 직접 시도하는 요청 + detection(`canary-in-response`/`sink-egress`). 결과를
+  `agent-required`(agent 경유만 됨 → 진짜 AI 취약점) vs `backend-reachable`(백엔드 단독
+  가능 → misconfig)로 분류. `AgentRunResult.projectOnly`에 기록, evidence에서 redact.
 
 ## 아직 안 된 것 / 다음 단계 (우선순위)
 
-1. **project-only counterfactual 분리(FR-455)** — 같은 효과가 backend 단독으로도
-   되는지 vs agent 경유가 필요한지 구분 → "AI 특유"라고 정직히 주장.
-2. **compound chain** — injection → tool arg → 기존 HTTP sink(SSRF/BOLA)까지 한
+1. **compound chain** — injection → tool arg → 기존 HTTP sink(SSRF/BOLA)까지 한
    candidate로 연결. 기존 causal HTTP 엔진 재사용률 높음(ROI 큼).
-3. **MCP pack(FR-456)** — tool shadowing / rug-pull / capability drift snapshot.
-4. **memory pack(FR-457/458)** — poisoned write → 지연 activation, provenance 손실.
-5. **seed/mutation 생성기** — LLM으로 injection carrier 변형 생성(판정 아님).
+2. **MCP pack(FR-456)** — tool shadowing / rug-pull / capability drift snapshot.
+3. **memory pack(FR-457/458)** — poisoned write → 지연 activation, provenance 손실.
+4. **seed/mutation 생성기** — LLM으로 injection carrier 변형 생성(판정 아님).
 
 ## 판정 원칙 (agent에도 동일 적용)
 
