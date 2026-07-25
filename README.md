@@ -74,9 +74,10 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - gateway/proxy witness(`agent-gateway-egress`): 에이전트 egress를 프록시로 통과시켜
   임의 목적지 exfil을 관측(owned sink 불필요, black-box). mutation 엔진 + 적응형 exploit
   탐색(`searchAgentAttack`, FR-407): seed가 실패해도 통하는 변형을 스스로 탐색(판정은 witness)
-- 공개 corpus ingestion(`parseInjecAgent`): InjecAgent(MIT, 1,054케이스)를 프로브로 변환.
-  corpus의 성공 라벨은 hint로 강등하고 **우리 witness로 ground truth 재도출** — "손으로 짠
-  seed"를 필드 축적으로 대체. `corpusCaseToProgram`으로 runnable AgentAttackProgram 생성
+- 공개 corpus ingestion(`parseInjecAgent`(MIT, indirect)·`parseGarakPrompts`(Apache-2.0,
+  direct)): corpus의 성공 라벨은 hint로 강등하고 **우리 witness로 ground truth 재도출** —
+  "손으로 짠 seed"를 필드 축적으로 대체. `corpusCaseToProgram`이 vector별(direct-message는
+  attack 메시지, tool-response는 carrier)로 runnable AgentAttackProgram 생성
 
 **증거·수명주기**
 

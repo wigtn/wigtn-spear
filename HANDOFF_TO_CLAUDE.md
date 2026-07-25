@@ -5,6 +5,19 @@
 
 ## 진행 로그
 
+- **2026-07-25 Phase 4 이어서: garak 어댑터 + direct/indirect vector 분기 + LLM 키 배치 (`npm run check`: 134 passed).**
+  - `corpus.ts` `corpusCaseToProgram` 리팩터: `vector`로 분기. `direct-message`(garak-style
+    jailbreak)는 attack 메시지에 직접, `tool-response`/`document`(InjecAgent-style)는 carrier
+    (indirect). `CorpusEngagement.carrier` optional화(direct는 불필요).
+  - `parseGarakPrompts(input, {probe})`: garak(Apache-2.0) payload를 newline-delimited 또는
+    JSON array로 받아 direct-message CorpusCase로. garak detector는 버리고 우리 witness로 재판정.
+    `test/agent-garak.test.ts`(파싱 2형식 + vulnerable proven/fixed rejected).
+  - **LLM 키 배치**: `.env`(이미 gitignore) + `.env.example` 추가. 키는 `process.env`로만 읽고
+    (`openAiChatTarget({apiKey: process.env.OPENAI_API_KEY!})`), evidence에서 redact. **채팅에
+    붙였던 키는 폐기·재발급 필수.**
+  - 남음(우선순위): AgentDojo 어댑터, attacker-LLM 루프(PAIR/TAP), 실제 LLM 라이브 실증
+    (키는 이제 .env), corpus/MCP/memory CLI.
+
 - **2026-07-25 Phase 4 이어서: 공개 corpus ingestion — InjecAgent 어댑터 (`npm run check`: 132 passed).**
   - 한계 #1(손으로 짠 seed) 정면 대응 첫 벽돌. `src/agent/corpus.ts`:
     - `CorpusCase`(source-agnostic: id/source/category/vector/userTask/injection/**effectHint**).
