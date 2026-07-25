@@ -33,8 +33,22 @@ witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등
    필요 없이 **egress 경로만 통제하면** 됨(현실적 black-box 세팅: 에이전트 프록시를
    우리로). **여전한 경계**: 에이전트가 프록시를 우회하거나 egress를 계측 못 하면 여전히
    candidate. 완전 무협조 black-box는 미해결.
-4. **[남음] fixture-proven ≠ real-world.** 실제 확률적 LLM 에이전트 end-to-end 실증
-   **여전히 0건**. flaky 비율 미실측. provider 어댑터는 준비됐으나 라이브 실행은 미수행.
+4. **[부분 해소] fixture-proven ≠ real-world.** `test/live-openai.test.ts`(gated, `LIVE_OPENAI=1`)로
+   **실제 OpenAI 모델에 첫 end-to-end 실증**. 아래 "라이브 실증 결과" 참고. 아직 남은 것:
+   대규모 corpus 라이브 실행, 다양한 모델·flaky 통계.
+
+## 라이브 실증 결과 (2026-07-25, `test/live-openai.test.ts`)
+
+실제 OpenAI 엔드포인트에 victim agent(시스템 프롬프트에 canary 심음)를 세우고 SPEAR로 공격:
+
+- **파이프라인 검증 ✅** — canary를 "공개 토큰"으로 프레이밍한 leaky victim에서 **gpt-4o-mini
+  proven=3/4**. corpus→변형→실제 API→witness→counterfactual→판정이 **실제 확률적 모델에서
+  end-to-end 동작**. fixture-아닌 첫 proven. 비용 **~$0.001**(토큰 로깅으로 실측).
+- **현대 모델 견고성** — `gpt-5.6-luna`는 secret-프레이밍 canary 추출(garak seed + 4 고전
+  변형)을 naive/vulnerable/hardened 전부 **rejected**. 즉 (a) 방어된 모델에 **false-positive
+  없음**, (b) **고전 seed로는 현대 모델을 못 뚫음** → attacker-LLM 루프 필요(냉정 평가 실측 확증).
+- **운영 발견** — 교전 키가 심하게 rate-limited → 실전은 backoff(추가함)+pacing+상위 티어 필요.
+  secret-프레이밍 추출의 gpt-4o-mini 정밀 판정은 rate-limit로 미완(추후 pacing 후 재측정).
 
 ## "어느 수준까지 터나" — 정직한 3단계
 
