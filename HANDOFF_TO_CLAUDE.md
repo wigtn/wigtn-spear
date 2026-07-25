@@ -5,6 +5,23 @@
 
 ## 진행 로그
 
+- **2026-07-25 Phase 4 이어서: 공개 corpus ingestion — InjecAgent 어댑터 (`npm run check`: 132 passed).**
+  - 한계 #1(손으로 짠 seed) 정면 대응 첫 벽돌. `src/agent/corpus.ts`:
+    - `CorpusCase`(source-agnostic: id/source/category/vector/userTask/injection/**effectHint**).
+      **핵심 원칙**: corpus의 성공 라벨은 `effectHint`로 강등하고 우리 witness로 ground truth
+      재도출(FR-408, 차별점).
+    - `parseInjecAgent(json, {split})`: InjecAgent(MIT) 스키마 파싱 — 공백 키(`User Instruction`/
+      `Attacker Instruction`/`Attack Type`/`Expected Achievements`), dh/ds split 태그, malformed
+      skip, 비배열 거부. InjecAgent injection은 tool response 경유 = indirect → carrier로 매핑.
+    - `corpusCaseToProgram(case, engagement)`: corpus injection을 carrier.maliciousContent에 심고
+      engagement의 witnessable objective(canary-leak/gateway-egress)로 steer → runnable
+      AgentAttackProgram. "이 injection 스타일이 이 타깃을 실제로 뚫는가"를 측정.
+  - `test/agent-corpus.test.ts`: InjecAgent-스키마 샘플(우리 합성, 그들 데이터 아님) 파싱 →
+    프로그램 변환 → 벤치마크 하네스로 vulnerable=proven/fixed=rejected. **실제 InjecAgent JSON
+    파일(사용자가 MIT로 다운)을 넣으면 그대로 corpus로 동작.**
+  - 남음(우선순위): garak 프로브 어댑터(Apache-2.0, `probe.prompts` 추출), AgentDojo 어댑터,
+    attacker-LLM 루프(PAIR/TAP), 실제 LLM 라이브 실증, MCP/memory/corpus CLI.
+
 - **2026-07-25 Phase 4 이어서: gateway/proxy witness — black-box egress 관측 (`npm run check`: 130 passed).**
   - 냉정 평가 한계 #2(witness 의존/black-box) 부분 해소. `agent-gateway-egress` oracle
     (`gateway: {observeUrl, resetUrl}` + `canary`): 에이전트 tool egress를 **owned 프록시

@@ -74,6 +74,9 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 - gateway/proxy witness(`agent-gateway-egress`): 에이전트 egress를 프록시로 통과시켜
   임의 목적지 exfil을 관측(owned sink 불필요, black-box). mutation 엔진 + 적응형 exploit
   탐색(`searchAgentAttack`, FR-407): seed가 실패해도 통하는 변형을 스스로 탐색(판정은 witness)
+- 공개 corpus ingestion(`parseInjecAgent`): InjecAgent(MIT, 1,054케이스)를 프로브로 변환.
+  corpus의 성공 라벨은 hint로 강등하고 **우리 witness로 ground truth 재도출** — "손으로 짠
+  seed"를 필드 축적으로 대체. `corpusCaseToProgram`으로 runnable AgentAttackProgram 생성
 
 **증거·수명주기**
 
@@ -85,11 +88,12 @@ compatible pack이나 witness가 없으면 결과는 `coverage-incomplete`입니
 ## 아직 구현되지 않은 것
 
 - browser/WebSocket/gRPC/queue runtime 자동 mapping
-- agent: 공개 corpus ingestion(garak/InjecAgent/AgentDojo, 최우선), attacker-LLM 루프
-  (PAIR/TAP/Crescendo), 실제 LLM 라이브 실증, MCP/memory CLI+서명 번들, agent tool-state
-  fuzzer(프론티어) (agent 공격 엔진 7종·`run agent` CLI·provider 프리셋·hostname pinning·
-  project-only(FR-455)·indirect carrier(FR-451)·confused deputy(LLM06)·MCP(FR-456)·memory
-  (FR-457/458)·gateway egress witness·mutation+adaptive search(FR-407)·벤치마크 하네스는 구현됨)
+- agent: corpus ingestion 확장(garak Apache-2.0/AgentDojo MIT), attacker-LLM 루프
+  (PAIR/TAP/Crescendo), 실제 LLM 라이브 실증, MCP/memory/corpus CLI+서명 번들, agent
+  tool-state fuzzer(프론티어) (agent 공격 엔진 7종·`run agent` CLI·provider 프리셋·hostname
+  pinning·project-only(FR-455)·indirect carrier(FR-451)·confused deputy(LLM06)·MCP(FR-456)·
+  memory(FR-457/458)·gateway egress witness·mutation+adaptive search(FR-407)·InjecAgent
+  ingestion·벤치마크 하네스는 구현됨)
 - race/parser/cloud 등 추가 project attack family
 - live target을 재공격하는 CI deterministic replay
 - HTTP 동시성(paired/maxConcurrency 강제), browser/DB audit witness oracle
