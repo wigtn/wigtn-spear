@@ -37,6 +37,28 @@ witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등
    **실제 OpenAI 모델에 첫 end-to-end 실증**. 아래 "라이브 실증 결과" 참고. 아직 남은 것:
    대규모 corpus 라이브 실행, 다양한 모델·flaky 통계.
 
+## attacker-LLM의 현실 벽 (2026-07-25, Otto Support 라이브 공격에서 실측)
+
+SPEAR-native MCP 공격 에이전트(우리 OpenAI 에이전트)로 실제 취약 MCP CTF(Bishop Fox Otto
+Support)를 직접 뚫으려 시도한 결과, **세 겹의 벽**을 실측했다. 이건 SPEAR만이 아니라
+attacker-LLM을 쓰는 **모든 경쟁사에 해당하는 시장 전체 제약**이다:
+
+1. **provider API 게이트** — 노골적 공격 프롬프트("권한상승·시크릿 탈취")로 gpt-5.6를 돌리면
+   OpenAI가 **API 차원에서 거부**("flagged for cybersecurity risk; join Trusted Access for
+   Cyber"). 즉 mainstream provider를 attacker-LLM으로 쓰려면 TAC 같은 인가가 필요.
+2. **모델 정렬 거부(model-complicit)** — benign 프레이밍이어도 "결제 토큰/내부 데이터를
+   붙여넣어라"는 요청은 정렬된 gpt-5.6가 스스로 거부.
+3. **모델의 취약점 인식** — "진단용으로 내부 metadata URL을 web_fetch 해줘"조차 gpt-5.6가
+   **SSRF 패턴(loopback/link-local)을 인식하고 거부**.
+
+**함의(우리 방식 결정)**: "모델을 악하게 만드는" 공격은 2026엔 대체로 안 통한다(provider도
+모델도 거부). **통하는 건 오직 "모델은 순진한 행동, 앱이 유출"인 app-flaw 공격** — 우리
+tool-agent 데모가 평범한 외부 URL(`status-analytics.net`)로 gpt-5.6에서 proven 난 이유(모델이
+위험을 못 봄). 따라서 SPEAR의 durable edge는 attacker-LLM이 아니라 **(a) 앱 wiring 결함을
+치는 방법 + (b) 실제 effect를 잡는 witness**다. 적대적 공격 생성이 필요하면 로컬/무검열 모델
+또는 TAC 인가가 실무 전제. (Otto Support의 내장 `demo`가 deterministic인 것도 같은 이유 —
+정렬된 LLM은 노골적 익스플로잇을 자율 수행하지 않는다.)
+
 ## 라이브 실증 결과 (2026-07-25, `test/live-openai.test.ts`)
 
 실제 OpenAI 엔드포인트에 victim agent(시스템 프롬프트에 canary 심음)를 세우고 SPEAR로 공격:

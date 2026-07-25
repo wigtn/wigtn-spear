@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
 import { AddressInfo } from 'node:net';
 import test from 'node:test';
-import { startMcpWitnessProxy } from '../src/agent/index.js';
+import { runMcpCausalAttack, startMcpWitnessProxy } from '../src/agent/index.js';
 
 // A fake MCP server: a tools/call for `leak_secret` returns an admin token in its
 // result (the exfil); any other tool returns clean content.
@@ -50,6 +50,35 @@ test('MCP witness proxy observes a forbidden canary leaking through a tool resul
     // Reset clears state for the next attempt/phase.
     proxy.reset();
     assert.equal(proxy.observedLeak(), false);
+  } finally {
+    await proxy.close();
+    await new Promise<void>((r) => upstream.server.close(() => r()));
+  }
+});
+
+test('runMcpCausalAttack proves a leak caused by the attack driver, and rejects a canned always-on exploit', async () => {
+  const upstream = await fakeMcpUpstream();
+  const proxy = await startMcpWitnessProxy({ upstream: upstream.url, canaries: [/adm-[a-z0-9-]+/iu] });
+  try {
+    // A driver that leaks ONLY under attack → proven (the malicious input is the cause).
+    const proven = await runMcpCausalAttack({
+      proxy,
+      drive: (phase) => toolCall(proxy.origin, phase === 'attack' ? 'leak_secret' : 'status'),
+    });
+    assert.equal(proven.disposition, 'proven');
+    assert.equal(proven.baselineObserved, false);
+    assert.equal(proven.counterfactualObserved, false);
+    assert.ok(proven.leaked.some((o) => o.leaked.includes('adm-temp-ssrf-2026')));
+
+    // A "canned exploit" that fires regardless of input → the leak shows in baseline
+    // too, so it is NOT proven: the malicious input was not demonstrated as the cause.
+    const canned = await runMcpCausalAttack({ proxy, drive: () => toolCall(proxy.origin, 'leak_secret') });
+    assert.equal(canned.disposition, 'rejected');
+    assert.equal(canned.baselineObserved, true);
+
+    // A driver that never leaks → rejected.
+    const clean = await runMcpCausalAttack({ proxy, drive: () => toolCall(proxy.origin, 'status') });
+    assert.equal(clean.disposition, 'rejected');
   } finally {
     await proxy.close();
     await new Promise<void>((r) => upstream.server.close(() => r()));
