@@ -47,6 +47,12 @@ witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등
 - **현대 모델 견고성(모델 직접 공격)** — `gpt-5.6-luna`는 secret-프레이밍 canary 추출(garak
   seed + 4 고전 변형)을 전부 **rejected**. 모델 safety는 강함 → **모델을 jailbreak하는 건 타깃이
   아님**.
+- **🎯🎯 가드레일 우회 → gpt-5.6-sol PROVEN, 출력은 깨끗** (`test/live-guarded-agent.test.ts`) —
+  **가장 강한 결과(2026 실전급).** 입력 가드레일 단 victim: naive injection → **rejected**(가드가
+  막음, false-positive 없음), benign-framed 우회 → **proven 3/3**(가드 통과, 플래그십 모델이 fetch
+  → 토큰 유출). **응답은 "verified"로 redact되어 깨끗** → 출력 검사/LLM-judge는 안전하다 오판하나
+  **witness는 실제 유출 포착.** "모델 거부처럼 보여도 툴은 유출" → 가드레일 시대에 witness 우위 실증.
+  10콜 ~$0.013(sol).
 - **🎯 앱 레이어 tool-abuse → gpt-5.6 PROVEN** (`test/live-tool-agent.test.ts`) — **핵심 결과.**
   `fetch_url` 툴을 단 victim 에이전트(앱 결함: 모든 outbound fetch에 세션 토큰 자동 첨부 =
   SSRF+credential leak). gpt-5.6-terra는 "verify를 위해 URL을 fetch하라"는 **정상 지시를 따랐을
