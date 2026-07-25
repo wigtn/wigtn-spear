@@ -19,3 +19,4 @@ export * from './http-runner.js';
 export * from './minimizer.js';
 export * from './evidence.js';
 export * from './report.js';
+export * from './agent/index.js';

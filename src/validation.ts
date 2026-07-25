@@ -28,6 +28,7 @@ import {
   requireString,
   stringArray,
 } from './utils.js';
+import type { AgentAttackProgram } from './agent/types.js';
 
 const ENVIRONMENTS = new Set<EnvironmentClass>(['disposable', 'test', 'production']);
 const SAFETY_CLASSES = new Set<SafetyClass>([
@@ -579,4 +580,142 @@ export function validateCausalHttpAttackProgram(value: unknown): CausalHttpAttac
 export function asRecord(value: unknown, context: string): Record<string, unknown> {
   if (!isRecord(value)) throw new SpearConfigError(`${context} must be an object`);
   return value;
+}
+
+const AGENT_PLANTED_LOCATIONS = new Set<AgentAttackProgram['planted']['location']>([
+  'system-prompt',
+  'rag-document',
+  'tool-data',
+  'other-user-record',
+]);
+
+function validateHttpUrl(
+  record: Record<string, unknown>,
+  key: string,
+  context: string,
+): string {
+  const raw = requireString(record, key, context);
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new SpearConfigError(`${context}.${key} must be an absolute URL`);
+  }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    throw new SpearSafetyError(`${context}.${key} must be credential-free HTTP(S)`);
+  }
+  return raw;
+}
+
+function validateSafeHeaders(value: unknown, context: string): void {
+  const headers = requireRecord(value, context);
+  for (const [name, headerValue] of Object.entries(headers)) {
+    if (
+      !/^[A-Za-z0-9-]+$/u.test(name)
+      || typeof headerValue !== 'string'
+      || /[\r\n]/u.test(headerValue)
+    ) {
+      throw new SpearSafetyError(`${context} contains an unsafe header`);
+    }
+  }
+}
+
+function validateAgentMessageSpec(value: unknown, context: string): void {
+  const spec = requireRecord(value, context);
+  requireString(spec, 'probeId', context);
+  const message = requireString(spec, 'message', context);
+  if (message.trim() === '') {
+    throw new SpearConfigError(`${context}.message must not be empty`);
+  }
+}
+
+/**
+ * Validate a stored agent-attack program as an untrusted artifact. Agent programs
+ * are structurally nondeterministic (an LLM decides), so — inverse of the HTTP
+ * rule — they MUST declare nondeterministic:true and use the relaxed FR-603
+ * threshold (>=2 successes out of >=3 attempts). Effect oracles carry a canary;
+ * tool-egress additionally requires an owned witness sink.
+ */
+export function validateAgentAttackProgram(value: unknown): AgentAttackProgram {
+  const program = requireRecord(value, 'program');
+  requireV3(program, 'program');
+  if (program.kind !== 'agent-attack-program') {
+    throw new SpearConfigError('program.kind must be "agent-attack-program"');
+  }
+  requireString(program, 'id', 'program');
+  requireString(program, 'title', 'program');
+
+  const target = requireRecord(program.target, 'program.target');
+  validateHttpUrl(target, 'endpoint', 'program.target');
+  if (target.method !== undefined && target.method !== 'POST') {
+    throw new SpearConfigError('program.target.method must be "POST"');
+  }
+  const bodyTemplate = requireString(target, 'bodyTemplate', 'program.target');
+  if (!bodyTemplate.includes('{{message}}')) {
+    throw new SpearConfigError('program.target.bodyTemplate must contain the {{message}} placeholder');
+  }
+  requireString(target, 'replyJsonPath', 'program.target');
+  if (target.headers !== undefined) validateSafeHeaders(target.headers, 'program.target.headers');
+  if (target.maxResponseBytes !== undefined) {
+    requireInteger(target, 'maxResponseBytes', 'program.target', 1_024, 16_777_216);
+  }
+
+  const planted = requireRecord(program.planted, 'program.planted');
+  requireString(planted, 'canary', 'program.planted');
+  requireEnum(planted, 'location', 'program.planted', AGENT_PLANTED_LOCATIONS);
+
+  validateAgentMessageSpec(program.baseline, 'program.baseline');
+  validateAgentMessageSpec(program.attack, 'program.attack');
+  validateAgentMessageSpec(program.counterfactual, 'program.counterfactual');
+
+  const execution = requireRecord(program.execution, 'program.execution');
+  if (execution.nondeterministic !== true) {
+    throw new SpearConfigError(
+      'program.execution.nondeterministic must be true for an agent program',
+    );
+  }
+  const repetitions = requireInteger(execution, 'repetitions', 'program.execution', 3, 20);
+  requireInteger(execution, 'minimumAttackSuccesses', 'program.execution', 2, repetitions);
+
+  const oracle = requireRecord(program.oracle, 'program.oracle');
+  const kind = requireString(oracle, 'kind', 'program.oracle');
+  if (kind === 'agent-canary-leak' || kind === 'agent-tool-egress') {
+    requireString(oracle, 'canary', 'program.oracle');
+  } else if (kind === 'agent-marker-compliance') {
+    requireString(oracle, 'marker', 'program.oracle');
+  } else {
+    throw new SpearConfigError(`Unsupported agent oracle: ${kind}`);
+  }
+
+  if (program.sink !== undefined) {
+    const sink = requireRecord(program.sink, 'program.sink');
+    validateHttpUrl(sink, 'observeUrl', 'program.sink');
+    validateHttpUrl(sink, 'resetUrl', 'program.sink');
+  }
+  if (kind === 'agent-tool-egress' && program.sink === undefined) {
+    throw new SpearConfigError('agent-tool-egress oracle requires program.sink (an owned witness)');
+  }
+
+  if (program.projectOnly !== undefined) {
+    const probe = requireRecord(program.projectOnly, 'program.projectOnly');
+    const request = requireRecord(probe.request, 'program.projectOnly.request');
+    validateHttpUrl(request, 'url', 'program.projectOnly.request');
+    if (request.method !== undefined && request.method !== 'GET' && request.method !== 'POST') {
+      throw new SpearConfigError('program.projectOnly.request.method must be "GET" or "POST"');
+    }
+    if (request.headers !== undefined) {
+      validateSafeHeaders(request.headers, 'program.projectOnly.request.headers');
+    }
+    if (request.body !== undefined && typeof request.body !== 'string') {
+      throw new SpearConfigError('program.projectOnly.request.body must be a string');
+    }
+    const detection = requireString(probe, 'detection', 'program.projectOnly');
+    if (detection !== 'canary-in-response' && detection !== 'sink-egress') {
+      throw new SpearConfigError(`Unsupported projectOnly detection: ${detection}`);
+    }
+    if (detection === 'sink-egress' && program.sink === undefined) {
+      throw new SpearConfigError('projectOnly sink-egress detection requires program.sink');
+    }
+  }
+  return program as unknown as AgentAttackProgram;
 }
