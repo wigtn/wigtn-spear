@@ -19,12 +19,12 @@ witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등
 
 ## 한계 진행 상황 (닫힌 것 / 남은 것)
 
-1. **[부분 해소] 발견 vs 검증.** `src/agent/mutator.ts`(변형 엔진)+`search.ts`(적응형
-   탐색, FR-407)로 이제 seed 하나를 다수 변형으로 펼쳐 **타깃에 먹히는 exploit 변형을
-   스스로 탐색**한다(`searchAgentAttack`). seed가 그대로는 실패해도 override/social/
-   roleplay/obfuscation 변형 중 통하는 걸 찾는다. **여전한 정직한 경계**: 이건 *알려진
-   클래스 안에서* 통하는 phrasing 발견이지, *새 취약점 클래스*를 발명하는 건 아니다.
-   판정은 여전히 deterministic oracle(FR-408).
+1. **[부분 해소] 발견 vs 검증.** 두 갈래로 대응: (a) `mutator.ts`+`search.ts`(적응형
+   탐색, FR-407)로 seed를 변형해 **타깃에 먹히는 exploit을 스스로 탐색**. (b) `corpus.ts`
+   `parseInjecAgent`로 **공개 corpus(InjecAgent MIT, 1,054)를 프로브로 ingest** → "손으로 짠
+   3개 seed"를 필드 축적으로 대체. corpus의 성공 라벨은 hint로 강등하고 우리 witness로
+   재판정. **여전한 경계**: 알려진 클래스 안에서 통하는 걸 찾는 것이지 새 클래스 발명은
+   아니다. garak/AgentDojo 어댑터는 다음. 판정은 여전히 deterministic(FR-408).
 2. **[해소] adaptive search(FR-407).** 위 `searchAgentAttack`가 실패 시 다음 전략으로
    진행하고 proven이면 조기 종료, budget으로 bound. 고정 프로그램만 돌던 상태 해소.
 3. **[부분 해소] witness 의존 / black-box.** `agent-gateway-egress` oracle +
@@ -55,11 +55,10 @@ witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등
 
 ## 남은 상향 작업 (우선순위)
 
-1. **공개 corpus ingestion (최우선)** — garak(Apache-2.0)/InjecAgent(MIT, 1,054, 성공조건이
-   tool 호출)/AgentDojo(MIT)를 프로브로 자동 변환. 각 corpus의 oracle은 hint로 강등하고
-   우리 witness로 ground truth 재도출. "손으로 짠 seed"를 필드 전체 축적으로 대체.
+1. **corpus ingestion 확장** — InjecAgent 어댑터 구현됨(`parseInjecAgent`). 다음: garak
+   (Apache-2.0, `probe.prompts` 추출 + 우리 witness로 detector 교체), AgentDojo(MIT).
 2. **attacker-LLM 루프** — PAIR/TAP tree-search + Crescendo 멀티턴 재구현(black-box). 판정은
-   여전히 deterministic(FR-408).
+   여전히 deterministic(FR-408). mutation 엔진 + corpus를 이 루프의 seed로.
 3. **실제 LLM 에이전트 라이브 실증 1건** — flaky 비율 실측(#4). provider 어댑터는 준비됨,
    API 키(env) 필요. gateway witness는 구현됨(black-box egress 관측).
 3. **공개 벤치마크 케이스 수입** — InjecAgent(1,054)/AgentDojo(629)를 프로브 corpus로

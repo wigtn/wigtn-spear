@@ -8,5 +8,6 @@ export * from './evidence.js';
 export * from './mcp.js';
 export * from './memory.js';
 export * from './benchmark.js';
+export * from './corpus.js';
 export * from './mutator.js';
 export * from './search.js';
