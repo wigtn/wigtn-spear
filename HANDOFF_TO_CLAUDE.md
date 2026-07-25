@@ -5,6 +5,18 @@
 
 ## 진행 로그
 
+- **2026-07-25 Phase 4 이어서: 발견 엔진 — 프로브 변형 + 적응형 탐색 (`npm run check`: 129 passed).**
+  - 냉정 평가의 한계 #1(발견 아닌 검증)·#4(adaptive search 없음)를 실제로 해소.
+  - `src/agent/mutator.ts`: seed 지시를 8개 전략(override/authority/social/roleplay/
+    delimiter/obfuscation)으로 **결정적** 변형(`mutateProbe`, RNG 없음 → proven 변형 replay 가능).
+  - `src/agent/search.ts` `searchAgentAttack`(FR-407): programTemplate(attack 제외)+baseInstruction
+    받아 변형을 순서대로 runAgentAttack, **proven이면 조기 종료**, budget bound. seed가 그대로
+    실패해도 통하는 변형을 탐색. 판정은 여전히 deterministic oracle(FR-408). raw 메시지 미저장
+    (digest만). `test/agent-search.test.ts`: seed 실패→변형으로 proven / hardened→rejected.
+  - **정직한 경계**: 이건 *알려진 클래스 내* phrasing 발견이지 새 취약점 클래스 발명 아님.
+  - 남은 상향(우선순위): gateway/proxy witness(black-box 독립 관측), 실제 LLM 라이브 실증,
+    공개 벤치마크(InjecAgent/AgentDojo) 케이스 수입, LLM 변형 전략 추가.
+
 - **2026-07-25 Phase 4 이어서: 벤치마크 하네스 + 냉정한 역량 자기평가 (`npm run check`: 126 passed).**
   - `src/agent/benchmark.ts` `runBenchmark(cases)`: 프로브 corpus를 campaign으로 돌려
     스코어카드 생성. disposition/category별 집계 + **independent-witness proven vs
