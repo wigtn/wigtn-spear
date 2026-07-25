@@ -44,9 +44,16 @@ witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등
 - **파이프라인 검증 ✅** — canary를 "공개 토큰"으로 프레이밍한 leaky victim에서 **gpt-4o-mini
   proven=3/4**. corpus→변형→실제 API→witness→counterfactual→판정이 **실제 확률적 모델에서
   end-to-end 동작**. fixture-아닌 첫 proven. 비용 **~$0.001**(토큰 로깅으로 실측).
-- **현대 모델 견고성** — `gpt-5.6-luna`는 secret-프레이밍 canary 추출(garak seed + 4 고전
-  변형)을 naive/vulnerable/hardened 전부 **rejected**. 즉 (a) 방어된 모델에 **false-positive
-  없음**, (b) **고전 seed로는 현대 모델을 못 뚫음** → attacker-LLM 루프 필요(냉정 평가 실측 확증).
+- **현대 모델 견고성(모델 직접 공격)** — `gpt-5.6-luna`는 secret-프레이밍 canary 추출(garak
+  seed + 4 고전 변형)을 전부 **rejected**. 모델 safety는 강함 → **모델을 jailbreak하는 건 타깃이
+  아님**.
+- **🎯 앱 레이어 tool-abuse → gpt-5.6 PROVEN** (`test/live-tool-agent.test.ts`) — **핵심 결과.**
+  `fetch_url` 툴을 단 victim 에이전트(앱 결함: 모든 outbound fetch에 세션 토큰 자동 첨부 =
+  SSRF+credential leak). gpt-5.6-terra는 "verify를 위해 URL을 fetch하라"는 **정상 지시를 따랐을
+  뿐**인데 앱이 토큰을 공격자 목적지로 유출 → **gateway witness가 관측 → disposition=proven,
+  3/3** (baseline/counterfactual은 fetch 안 유발 → 미유출). **jailbreak 아님, agency 악용.**
+  8콜, ~1센트 미만. **결론: 취약점은 모델이 아니라 앱이 툴/데이터/출력을 어떻게 신뢰·연결하느냐에
+  있고, 정렬된 최신 모델에서도 witness로 입증된다.** 이것이 SPEAR의 진짜 타깃이자 차별점.
 - **운영 발견** — 교전 키가 심하게 rate-limited → 실전은 backoff(추가함)+pacing+상위 티어 필요.
   secret-프레이밍 추출의 gpt-4o-mini 정밀 판정은 rate-limit로 미완(추후 pacing 후 재측정).
 
@@ -83,7 +90,9 @@ witness**. self-report(모델 텍스트)만 있는 신호는 candidate로 강등
 
 ## 한 줄 결론
 
-엔진·증거·**적응형 탐색**까지 진짜다(6종 witness-proven + mutation search, 129 테스트).
-정직한 상한은 여전히 **"고객 협조 gray-box 교전에서 알려진 6클래스를 반박불가 증거로
-입증·회귀 + 통하는 exploit 변형 자동 탐색"**. 남은 격차는 (a) black-box에서의 독립
-witness(gateway), (b) 실제 LLM 라이브 실증 — 둘 다 진행 중 항목이다.
+엔진·증거·적응형 탐색·corpus ingestion까지 진짜고, **현재 플래그십 모델(gpt-5.6)에서
+앱 레이어 tool-abuse를 witness로 proven했다.** 핵심 교훈: **모델을 jailbreak하는 게
+아니라, 앱이 툴·데이터·출력을 어떻게 신뢰·연결하느냐의 결함을 정렬된 최신 모델의 정상
+agency를 통해 실제 효과로 입증한다.** 이것이 고객 에이전트/제품의 진짜 허점이고 SPEAR의
+타깃이다. 남은 것: attacker-LLM 루프(신선한 injection 생성), 대량 corpus 라이브 스코어카드,
+더 많은 툴/권한/출력-sink 시나리오.

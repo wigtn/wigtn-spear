@@ -5,6 +5,21 @@
 
 ## 진행 로그
 
+- **2026-07-25 라이브 실증: 앱 레이어 tool-abuse로 gpt-5.6 PROVEN (`npm run check`: 136 passed, 라이브 gated).**
+  - **핵심 방향 전환**: 모델 자체를 jailbreak하는 건 타깃 아님(OpenAI가 방어, 고객이 못 고침).
+    진짜 타깃 = 고객이 모델 위에 올린 **앱/에이전트**의 결함(툴 wiring·데이터 신뢰·권한·출력 sink).
+  - `test/live-openai.test.ts`(canary-leak, gated): gpt-4o-mini leaky victim proven=3/4(파이프라인
+    검증), gpt-5.6-luna는 secret 추출 전부 rejected(모델 safety 강함, false-positive 없음).
+  - **`test/live-tool-agent.test.ts`(gated): 툴 달린 victim 에이전트. 앱 결함 = `fetch_url` 툴이
+    모든 outbound fetch에 세션 토큰 자동 첨부(SSRF+cred leak). gpt-5.6-terra가 "verify하려 URL
+    fetch"라는 정상 지시를 따랐을 뿐인데 앱이 토큰 유출 → gateway witness 관측 → disposition=proven
+    3/3, baseline/cf 미유출. jailbreak 아님, agency 악용. 8콜 ~1센트.**
+  - 실측 이슈: (1) gpt-5.x 추론모델은 tools 사용 시 `reasoning_effort:'none'` 필수(chat/completions).
+    (2) 이 키는 무료티어 모델당 **50 RPD** 제한 → 모델 갈아가며 사용(luna 소진 시 terra/sol).
+    (3) rate-limit 429 재시도+pacing 추가. 키는 채팅 노출로 폐기 후 재발급됨(현 .env).
+  - 남음(우선순위): attacker-LLM 루프(신선 injection 생성, PAIR/TAP), 대량 corpus 라이브
+    스코어카드, 더 많은 툴/권한/출력-sink victim 시나리오, 상위 티어 키.
+
 - **2026-07-25 Phase 4 이어서: garak 어댑터 + direct/indirect vector 분기 + LLM 키 배치 (`npm run check`: 134 passed).**
   - `corpus.ts` `corpusCaseToProgram` 리팩터: `vector`로 분기. `direct-message`(garak-style
     jailbreak)는 attack 메시지에 직접, `tool-response`/`document`(InjecAgent-style)는 carrier
