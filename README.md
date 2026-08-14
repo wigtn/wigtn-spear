@@ -209,3 +209,9 @@ IP-literal입니다.
 제품 요구사항은 [SPEAR v3 PRD](./docs/product/spear-v3-prd.md), 현재 구현 판정은
 [foundation acceptance report](./docs/product/spear-v3-foundation-acceptance-report.md)를
 참고하십시오.
+
+## 코드 리뷰
+
+이 저장소의 PR은 열리거나 갱신되면 자동으로 리뷰가 달립니다.
+리뷰어는 PR을 별도 워크트리에 체크아웃해 검사를 실제로 실행한 뒤,
+결과와 판단을 코멘트로 남깁니다. 코멘트 작성자는 `wigtn-contact`입니다.
